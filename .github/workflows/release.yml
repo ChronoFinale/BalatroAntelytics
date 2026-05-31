@@ -1,0 +1,36 @@
+name: Release
+
+# Cut a release by pushing a version tag, e.g.:
+#   git tag v0.1.0-alpha && git push origin v0.1.0-alpha
+# Builds the mod zip and attaches it to a GitHub Release. Tests are enforced
+# separately on every push/PR by ci.yml — packaging is just a file copy + zip,
+# so this job needs no Lua toolchain (which keeps releases from breaking on
+# CI-runner Lua/LuaJIT install flakiness).
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+# Run the JS actions (checkout, gh-release) on Node 24 instead of the
+# deprecated Node 20.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build mod zip
+        run: bash ./package.sh
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Antelytics.zip
+          generate_release_notes: true

@@ -1,0 +1,30 @@
+name: Feedback / Bug report
+description: Report a bug or share feedback for the Antelytics mod or website.
+title: "[Feedback] "
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve Antelytics! One tracker covers both the capture mod and the website.
+  - type: dropdown
+    id: component
+    attributes:
+      label: What's this about?
+      options:
+        - Capture mod (in-game)
+        - Website (antelytics.gg viewer)
+        - Both / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: What happened / your idea
+      description: Describe the bug or the feedback. For a viewer bug, the run seed (or the run file) helps a lot.
+    validations:
+      required: true
+  - type: input
+    id: seed
+    attributes:
+      label: Run seed (optional)
+      description: If it's about a specific run, the seed shown in the viewer header.

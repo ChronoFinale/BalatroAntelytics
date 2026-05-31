@@ -1,0 +1,12 @@
+{
+  "title": "Antelytics",
+  "requires-steamodded": true,
+  "requires-talisman": false,
+  "categories": ["Technical", "Quality of Life"],
+  "author": "Chrono",
+  "repo": "https://github.com/ChronoFinale/BalatroAntelytics",
+  "downloadURL": "https://github.com/ChronoFinale/BalatroAntelytics/releases/latest/download/Antelytics.zip",
+  "version": "1.0.0",
+  "folderName": "Antelytics",
+  "automatic-version-check": true
+}
