@@ -1,0 +1,3 @@
+# Keep shell scripts LF so they run under CI bash regardless of the committer's
+# OS. (CRLF in a .sh breaks the shebang/commands when executed on Linux.)
+*.sh text eol=lf

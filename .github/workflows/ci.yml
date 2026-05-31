@@ -1,0 +1,30 @@
+name: CI
+
+# Tests on every push/PR. The pure-Lua logic is version-portable (the
+# serializer uses %c, not %z), so we test on PUC Lua 5.4 — which installs
+# reliably and supports the \xNN string escapes the specs use. (Balatro itself
+# runs LuaJIT; LuaJIT-in-CI was dropped because luarocks can't load its manifest
+# under LuaJIT — "more than 65536 constants".)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Run the JS actions (checkout) on Node 24 instead of the deprecated Node 20.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.4"
+      - uses: leafo/gh-actions-luarocks@v4
+      - name: Install busted
+        run: luarocks install busted
+      - name: Run tests
+        run: busted spec/

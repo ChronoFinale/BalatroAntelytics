@@ -1,0 +1,664 @@
+[
+  {
+    "action": {
+      "card_ids": [
+        "7",
+        "7"
+      ],
+      "cards": [
+        {
+          "id": "7",
+          "rank": "7",
+          "suit": "Spades"
+        },
+        {
+          "id": "7",
+          "rank": "7",
+          "suit": "Hearts"
+        }
+      ],
+      "discarded_hand_type": "Pair",
+      "type": "discard"
+    },
+    "index": 0,
+    "state": {
+      "ante": 1,
+      "blind_name": "Small Blind",
+      "blind_slot": [],
+      "blind_target": 100,
+      "boss_blind_effect": [],
+      "consumables": [],
+      "discards_remaining": 3,
+      "discards_used": [],
+      "full_deck": [
+        {
+          "area": "hand",
+          "id": "7",
+          "rank": "7",
+          "suit": "Spades"
+        },
+        {
+          "area": "hand",
+          "id": "7",
+          "rank": "7",
+          "suit": "Hearts"
+        },
+        {
+          "area": "hand",
+          "id": "Q",
+          "rank": "Q",
+          "suit": "Diamonds"
+        },
+        {
+          "area": "hand",
+          "id": "4",
+          "rank": "4",
+          "suit": "Spades"
+        },
+        {
+          "area": "hand",
+          "id": "4",
+          "rank": "4",
+          "suit": "Hearts"
+        },
+        {
+          "area": "hand",
+          "id": "3",
+          "rank": "3",
+          "suit": "Spades"
+        },
+        {
+          "area": "hand",
+          "id": "3",
+          "rank": "3",
+          "suit": "Hearts"
+        },
+        {
+          "area": "hand",
+          "id": "A",
+          "rank": "A",
+          "suit": "Clubs"
+        }
+      ],
+      "hand_levels": {
+        "Five of a Kind": {
+          "chips": 120,
+          "level": 1,
+          "mult": 12,
+          "played": 0
+        },
+        "Flush": {
+          "chips": 35,
+          "level": 1,
+          "mult": 4,
+          "played": 0
+        },
+        "Flush Five": {
+          "chips": 160,
+          "level": 1,
+          "mult": 16,
+          "played": 0
+        },
+        "Flush House": {
+          "chips": 140,
+          "level": 1,
+          "mult": 14,
+          "played": 0
+        },
+        "Four of a Kind": {
+          "chips": 60,
+          "level": 1,
+          "mult": 7,
+          "played": 0
+        },
+        "Full House": {
+          "chips": 40,
+          "level": 1,
+          "mult": 4,
+          "played": 0
+        },
+        "High Card": {
+          "chips": 5,
+          "level": 1,
+          "mult": 1,
+          "played": 0
+        },
+        "Pair": {
+          "chips": 10,
+          "level": 1,
+          "mult": 2,
+          "played": 0
+        },
+        "Straight": {
+          "chips": 30,
+          "level": 1,
+          "mult": 4,
+          "played": 0
+        },
+        "Straight Flush": {
+          "chips": 100,
+          "level": 1,
+          "mult": 8,
+          "played": 0
+        },
+        "Three of a Kind": {
+          "chips": 30,
+          "level": 1,
+          "mult": 3,
+          "played": 0
+        },
+        "Two Pair": {
+          "chips": 20,
+          "level": 1,
+          "mult": 2,
+          "played": 0
+        }
+      },
+      "hands_remaining": 4,
+      "jokers": [],
+      "location": "unknown",
+      "money": 4,
+      "score": 0,
+      "seed": "TESTSEED",
+      "shop_inventory": [],
+      "tags": [],
+      "timestamp": 0,
+      "vouchers": []
+    }
+  },
+  {
+    "action": {
+      "card_ids": [
+        "4",
+        "4"
+      ],
+      "cards": [
+        {
+          "id": "4",
+          "rank": "4",
+          "suit": "Spades"
+        },
+        {
+          "id": "4",
+          "rank": "4",
+          "suit": "Hearts"
+        }
+      ],
+      "hand_type": "Pair",
+      "type": "play_hand"
+    },
+    "index": 1,
+    "state": {
+      "ante": 1,
+      "blind_name": "Small Blind",
+      "blind_slot": [],
+      "blind_target": 100,
+      "boss_blind_effect": [],
+      "consumables": [],
+      "discards_remaining": 2,
+      "discards_used": [],
+      "full_deck": [
+        {
+          "area": "hand",
+          "id": "7",
+          "rank": "7",
+          "suit": "Spades"
+        },
+        {
+          "area": "hand",
+          "id": "7",
+          "rank": "7",
+          "suit": "Hearts"
+        },
+        {
+          "area": "hand",
+          "id": "Q",
+          "rank": "Q",
+          "suit": "Diamonds"
+        },
+        {
+          "area": "hand",
+          "id": "4",
+          "rank": "4",
+          "suit": "Spades"
+        },
+        {
+          "area": "hand",
+          "id": "4",
+          "rank": "4",
+          "suit": "Hearts"
+        },
+        {
+          "area": "hand",
+          "id": "3",
+          "rank": "3",
+          "suit": "Spades"
+        },
+        {
+          "area": "hand",
+          "id": "3",
+          "rank": "3",
+          "suit": "Hearts"
+        },
+        {
+          "area": "hand",
+          "id": "A",
+          "rank": "A",
+          "suit": "Clubs"
+        }
+      ],
+      "hand_levels": {
+        "Five of a Kind": {
+          "chips": 120,
+          "level": 1,
+          "mult": 12,
+          "played": 0
+        },
+        "Flush": {
+          "chips": 35,
+          "level": 1,
+          "mult": 4,
+          "played": 0
+        },
+        "Flush Five": {
+          "chips": 160,
+          "level": 1,
+          "mult": 16,
+          "played": 0
+        },
+        "Flush House": {
+          "chips": 140,
+          "level": 1,
+          "mult": 14,
+          "played": 0
+        },
+        "Four of a Kind": {
+          "chips": 60,
+          "level": 1,
+          "mult": 7,
+          "played": 0
+        },
+        "Full House": {
+          "chips": 40,
+          "level": 1,
+          "mult": 4,
+          "played": 0
+        },
+        "High Card": {
+          "chips": 5,
+          "level": 1,
+          "mult": 1,
+          "played": 0
+        },
+        "Pair": {
+          "chips": 10,
+          "level": 1,
+          "mult": 2,
+          "played": 0
+        },
+        "Straight": {
+          "chips": 30,
+          "level": 1,
+          "mult": 4,
+          "played": 0
+        },
+        "Straight Flush": {
+          "chips": 100,
+          "level": 1,
+          "mult": 8,
+          "played": 0
+        },
+        "Three of a Kind": {
+          "chips": 30,
+          "level": 1,
+          "mult": 3,
+          "played": 0
+        },
+        "Two Pair": {
+          "chips": 20,
+          "level": 1,
+          "mult": 2,
+          "played": 0
+        }
+      },
+      "hands_remaining": 4,
+      "jokers": [],
+      "location": "unknown",
+      "money": 4,
+      "score": 0,
+      "seed": "TESTSEED",
+      "shop_inventory": [],
+      "tags": [],
+      "timestamp": 0,
+      "vouchers": []
+    }
+  },
+  {
+    "action": {
+      "card_ids": [
+        "3",
+        "3"
+      ],
+      "cards": [
+        {
+          "id": "3",
+          "rank": "3",
+          "suit": "Spades"
+        },
+        {
+          "id": "3",
+          "rank": "3",
+          "suit": "Hearts"
+        }
+      ],
+      "discarded_hand_type": "Pair",
+      "type": "discard"
+    },
+    "index": 2,
+    "state": {
+      "ante": 1,
+      "blind_name": "Small Blind",
+      "blind_slot": [],
+      "blind_target": 100,
+      "boss_blind_effect": [],
+      "consumables": [],
+      "discards_remaining": 2,
+      "discards_used": [],
+      "full_deck": [
+        {
+          "area": "hand",
+          "id": "7",
+          "rank": "7",
+          "suit": "Spades"
+        },
+        {
+          "area": "hand",
+          "id": "7",
+          "rank": "7",
+          "suit": "Hearts"
+        },
+        {
+          "area": "hand",
+          "id": "Q",
+          "rank": "Q",
+          "suit": "Diamonds"
+        },
+        {
+          "area": "hand",
+          "id": "4",
+          "rank": "4",
+          "suit": "Spades"
+        },
+        {
+          "area": "hand",
+          "id": "4",
+          "rank": "4",
+          "suit": "Hearts"
+        },
+        {
+          "area": "hand",
+          "id": "3",
+          "rank": "3",
+          "suit": "Spades"
+        },
+        {
+          "area": "hand",
+          "id": "3",
+          "rank": "3",
+          "suit": "Hearts"
+        },
+        {
+          "area": "hand",
+          "id": "A",
+          "rank": "A",
+          "suit": "Clubs"
+        }
+      ],
+      "hand_levels": {
+        "Five of a Kind": {
+          "chips": 120,
+          "level": 1,
+          "mult": 12,
+          "played": 0
+        },
+        "Flush": {
+          "chips": 35,
+          "level": 1,
+          "mult": 4,
+          "played": 0
+        },
+        "Flush Five": {
+          "chips": 160,
+          "level": 1,
+          "mult": 16,
+          "played": 0
+        },
+        "Flush House": {
+          "chips": 140,
+          "level": 1,
+          "mult": 14,
+          "played": 0
+        },
+        "Four of a Kind": {
+          "chips": 60,
+          "level": 1,
+          "mult": 7,
+          "played": 0
+        },
+        "Full House": {
+          "chips": 40,
+          "level": 1,
+          "mult": 4,
+          "played": 0
+        },
+        "High Card": {
+          "chips": 5,
+          "level": 1,
+          "mult": 1,
+          "played": 0
+        },
+        "Pair": {
+          "chips": 10,
+          "level": 1,
+          "mult": 2,
+          "played": 0
+        },
+        "Straight": {
+          "chips": 30,
+          "level": 1,
+          "mult": 4,
+          "played": 0
+        },
+        "Straight Flush": {
+          "chips": 100,
+          "level": 1,
+          "mult": 8,
+          "played": 0
+        },
+        "Three of a Kind": {
+          "chips": 30,
+          "level": 1,
+          "mult": 3,
+          "played": 0
+        },
+        "Two Pair": {
+          "chips": 20,
+          "level": 1,
+          "mult": 2,
+          "played": 0
+        }
+      },
+      "hands_remaining": 3,
+      "jokers": [],
+      "location": "unknown",
+      "money": 4,
+      "score": 0,
+      "seed": "TESTSEED",
+      "shop_inventory": [],
+      "tags": [],
+      "timestamp": 0,
+      "vouchers": []
+    }
+  },
+  {
+    "action": {
+      "card_ids": [
+        "A"
+      ],
+      "cards": [
+        {
+          "id": "A",
+          "rank": "A",
+          "suit": "Clubs"
+        }
+      ],
+      "hand_type": "High Card",
+      "type": "play_hand"
+    },
+    "index": 3,
+    "state": {
+      "ante": 1,
+      "blind_name": "Small Blind",
+      "blind_slot": [],
+      "blind_target": 100,
+      "boss_blind_effect": [],
+      "consumables": [],
+      "discards_remaining": 1,
+      "discards_used": [],
+      "full_deck": [
+        {
+          "area": "hand",
+          "id": "7",
+          "rank": "7",
+          "suit": "Spades"
+        },
+        {
+          "area": "hand",
+          "id": "7",
+          "rank": "7",
+          "suit": "Hearts"
+        },
+        {
+          "area": "hand",
+          "id": "Q",
+          "rank": "Q",
+          "suit": "Diamonds"
+        },
+        {
+          "area": "hand",
+          "id": "4",
+          "rank": "4",
+          "suit": "Spades"
+        },
+        {
+          "area": "hand",
+          "id": "4",
+          "rank": "4",
+          "suit": "Hearts"
+        },
+        {
+          "area": "hand",
+          "id": "3",
+          "rank": "3",
+          "suit": "Spades"
+        },
+        {
+          "area": "hand",
+          "id": "3",
+          "rank": "3",
+          "suit": "Hearts"
+        },
+        {
+          "area": "hand",
+          "id": "A",
+          "rank": "A",
+          "suit": "Clubs"
+        }
+      ],
+      "hand_levels": {
+        "Five of a Kind": {
+          "chips": 120,
+          "level": 1,
+          "mult": 12,
+          "played": 0
+        },
+        "Flush": {
+          "chips": 35,
+          "level": 1,
+          "mult": 4,
+          "played": 0
+        },
+        "Flush Five": {
+          "chips": 160,
+          "level": 1,
+          "mult": 16,
+          "played": 0
+        },
+        "Flush House": {
+          "chips": 140,
+          "level": 1,
+          "mult": 14,
+          "played": 0
+        },
+        "Four of a Kind": {
+          "chips": 60,
+          "level": 1,
+          "mult": 7,
+          "played": 0
+        },
+        "Full House": {
+          "chips": 40,
+          "level": 1,
+          "mult": 4,
+          "played": 0
+        },
+        "High Card": {
+          "chips": 5,
+          "level": 1,
+          "mult": 1,
+          "played": 0
+        },
+        "Pair": {
+          "chips": 10,
+          "level": 1,
+          "mult": 2,
+          "played": 0
+        },
+        "Straight": {
+          "chips": 30,
+          "level": 1,
+          "mult": 4,
+          "played": 0
+        },
+        "Straight Flush": {
+          "chips": 100,
+          "level": 1,
+          "mult": 8,
+          "played": 0
+        },
+        "Three of a Kind": {
+          "chips": 30,
+          "level": 1,
+          "mult": 3,
+          "played": 0
+        },
+        "Two Pair": {
+          "chips": 20,
+          "level": 1,
+          "mult": 2,
+          "played": 0
+        }
+      },
+      "hands_remaining": 3,
+      "jokers": [],
+      "location": "unknown",
+      "money": 4,
+      "score": 0,
+      "seed": "TESTSEED",
+      "shop_inventory": [],
+      "tags": [],
+      "timestamp": 0,
+      "vouchers": []
+    }
+  }
+]

@@ -1,0 +1,27 @@
+# Run files written by the mod — user-specific, not for version control
+log/
+runs/
+
+# Logs
+session.log
+*.log
+
+# OS / editor / tooling cruft
+.DS_Store
+Thumbs.db
+.idea/
+.kiro/
+.vscode/
+
+# Transient commit-message files
+COMMIT_MSG.tmp
+*.tmp
+
+# Lua bytecode
+*.luac
+
+# Coverage
+coverage/
+
+# Build output (package.sh / package.ps1)
+dist/
