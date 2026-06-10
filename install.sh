@@ -9,7 +9,7 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MODS_DIR="$HOME/Library/Application Support/Balatro/Mods/Antelytics"
+MODS_DIR="$HOME/Library/Application Support/Balatro/Mods/BalatroAntelytics"
 
 echo "Source : $REPO_DIR"
 echo "Target : $MODS_DIR"
