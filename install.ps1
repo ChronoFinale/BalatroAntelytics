@@ -15,7 +15,7 @@
 $ErrorActionPreference = 'Stop'
 
 $RepoDir = $PSScriptRoot
-$ModsDir = Join-Path $env:APPDATA "Balatro\Mods\Antelytics"
+$ModsDir = Join-Path $env:APPDATA "Balatro\Mods\BalatroAntelytics"
 
 Write-Host ("Source : {0}" -f $RepoDir)
 Write-Host ("Target : {0}" -f $ModsDir)
