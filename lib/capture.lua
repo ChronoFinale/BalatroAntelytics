@@ -1125,6 +1125,13 @@ function Capture.build_game_state(action_type)
                 function() return multiplayer.pvp_start_round() end,
                 "pvp.pvp_start_round", action_type
             ),
+            -- Shared room code — join key for merging two players' run files
+            -- (survives different_seeds, where state.seed differs per client).
+            -- Snapshotted live because the mod clears it on game-end.
+            lobby_code = safe_access(
+                function() return multiplayer.lobby_code() end,
+                "pvp.lobby_code", action_type
+            ),
         }
     end
 

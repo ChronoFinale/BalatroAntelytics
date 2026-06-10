@@ -353,6 +353,21 @@ function Multiplayer.new(opts)
             return mp.LOBBY and mp.LOBBY.config and mp.LOBBY.config.pvp_start_round
         end),
 
+        -- Shared lobby/room code (MP.LOBBY.code, action_handlers.lua:78). Both
+        -- clients in a match see the SAME code, so it's the join key for merging
+        -- two players' run files into one per-hand PvP view — and unlike the run
+        -- seed it survives `different_seeds=true` (different_seeds gives the two
+        -- clients DIFFERENT seeds, so state.seed alone can't join them then).
+        -- Capture it live on every node: the mod clears LOBBY.code to nil on
+        -- game-end/leave (functions.lua:150), so a post-run read would miss it.
+        -- The viewer joins on (lobby_code, seed) and aligns the Nth nemesis blind
+        -- in each file by node order — the ordinal is derivable by walk, so it's
+        -- not captured here.
+        lobby_code = make_accessor("lobby_code", function()
+            local mp = get_mp_global()
+            return mp.LOBBY and mp.LOBBY.code
+        end),
+
         -- Opponent's per-shop spending array (set by spentLastShop network messages)
         opponent_shop_spending = make_accessor("opponent_shop_spending", function()
             local mp = get_mp_global()
