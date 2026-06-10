@@ -86,7 +86,18 @@ local function decode_mp_score(mp, val)
             -- comma'd string broke the PvP win check: Number("8,106") = NaN.)
             if ok and s ~= nil then return (tostring(s):gsub(",", "")) end
         end
-        return val.coeffiocient or val.coefficient or nil
+        -- Fallback (to_string unavailable): the coeffiocient IS the whole value
+        -- only BELOW the INSANE_INT switch point, where exponent/e_count are 0.
+        -- Above it the magnitude lives in exponent/e_count and the bare
+        -- coeffiocient is just a small mantissa (4.07 for a 4.07e12 score), so
+        -- return nil (→ "—" in the viewer) rather than a wildly wrong number the
+        -- PvP win-check would trust.
+        local exp = val.exponent or 0
+        local ec = val.e_count or 0
+        if exp == 0 and ec == 0 then
+            return val.coeffiocient or val.coefficient or nil
+        end
+        return nil
     end
     return nil
 end
@@ -140,18 +151,17 @@ local function settled_score_table(enemy_score)
                             local ok, fv = pcall(ev.func, v)
                             if ok and fv ~= nil then v = fv end
                         end
-                        -- If a previous hand's ease is still in flight alongside
-                        -- this hand's (overlapping eases on the same field), take
-                        -- the larger target: PvP totals are monotonic within a
-                        -- blind and these scores sit below the INSANE_INT switch
-                        -- point, so coeffiocient alone carries magnitude and max
-                        -- is the settled total. Compare against the live value
-                        -- too, never regress below what's already on screen.
-                        if type(v) == "number" and type(target[field]) == "number" then
-                            if v > target[field] then target[field] = v end
-                        else
-                            target[field] = v
-                        end
+                        -- Last ease wins per field. The three sub-field eases for
+                        -- one enemyInfo are queued together (in order), so
+                        -- overwriting as we iterate yields the MOST RECENT target
+                        -- triple intact. NOTE: do NOT take a per-field max here.
+                        -- Above the INSANE_INT switch point a larger total has a
+                        -- SMALLER coeffiocient (magnitude carries in exponent/
+                        -- e_count), so max-per-field would staple the old large
+                        -- coeffiocient onto the new large exponent and fabricate a
+                        -- score that never existed. Most-recent-wins keeps the
+                        -- triple consistent at any magnitude.
+                        target[field] = v
                         found = true
                     end
                 end

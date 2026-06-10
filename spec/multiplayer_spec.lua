@@ -233,6 +233,58 @@ describe("Multiplayer accessor module", function()
             assert.are.equal("6133", mp.opponent_score())
         end)
 
+        it("opponent_score takes the most-recent ease per field, not a per-field max", function()
+            -- Two overlapping eases on the same field (a prior hand still
+            -- animating as the next lands). The LATER-queued ease is the current
+            -- target, so last-wins must pick it — even when it's numerically
+            -- smaller (which happens above the INSANE_INT switch point, where a
+            -- larger total has a smaller coeffiocient). A per-field max would
+            -- wrongly keep the stale larger value.
+            local score_tbl = { coeffiocient = 100, exponent = 0, e_count = 0 }
+            _G.MP = {
+                is_pvp_boss = function() return true end,
+                INSANE_INT = { to_string = function(v)
+                    return type(v) == "table" and tostring(v.coeffiocient) or nil
+                end },
+                LOBBY = { is_host = true, guest = { username = "rival" }, host = { username = "me" } },
+                GAME = { lives = 3, enemy = { lives = 2, hands = 0, score = score_tbl } },
+            }
+            _G.G = {
+                GAME = { chips = 8286, blind = { config = { blind = { key = "bl_mp_nemesis" } }, pvp = true } },
+                E_MANAGER = { queues = { base = {
+                    { trigger = "ease", func = math.floor, ease = {
+                        ref_table = score_tbl, ref_value = "coeffiocient", end_val = 100,
+                    } },
+                    { trigger = "ease", func = math.floor, ease = {
+                        ref_table = score_tbl, ref_value = "coeffiocient", end_val = 50,
+                    } },
+                } } },
+            }
+            local mp = Multiplayer.new({ logger = make_capturing_logger(), pvp_enabled = true })
+            -- last-wins -> 50 (the later ease); a per-field max would give 100.
+            assert.are.equal("50", mp.opponent_score())
+        end)
+
+        it("opponent_score is nil (not a bare mantissa) when to_string fails for a big score", function()
+            -- Fallback path (INSANE_INT.to_string missing). Below the switch point
+            -- the coeffiocient is the whole value; ABOVE it (exponent/e_count set)
+            -- the bare coeffiocient is just a mantissa, so decode returns nil
+            -- rather than a wildly wrong small number the win-check would trust.
+            local score_tbl = { coeffiocient = 4, exponent = 11, e_count = 0 }
+            _G.MP = {
+                is_pvp_boss = function() return true end,
+                INSANE_INT = {}, -- no to_string -> fallback
+                LOBBY = { is_host = true, guest = { username = "rival" }, host = { username = "me" } },
+                GAME = { lives = 3, enemy = { lives = 2, hands = 0, score = score_tbl } },
+            }
+            _G.G = {
+                GAME = { chips = 8286, blind = { config = { blind = { key = "bl_mp_nemesis" } }, pvp = true } },
+                E_MANAGER = { queues = { base = {} } },
+            }
+            local mp = Multiplayer.new({ logger = make_capturing_logger(), pvp_enabled = true })
+            assert.is_nil(mp.opponent_score())
+        end)
+
         it("lives and opponent hands read from MP.GAME", function()
             install_populated_mp({ player_lives = 3, opponent_lives = 1, opponent_hands = 2 })
             local mp = Multiplayer.new({ logger = make_capturing_logger(), pvp_enabled = true })
