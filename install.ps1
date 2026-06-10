@@ -1,7 +1,8 @@
 # install.ps1 — Windows PowerShell equivalent of install.sh.
 #
-# Copies the BalatroAntelytics mod source into the Balatro Mods directory
-# under %APPDATA%\Balatro\Mods\BalatroAntelytics.
+# Copies the mod source into the Balatro Mods directory under
+# %APPDATA%\Balatro\Mods\Antelytics (the mod's canonical folder name —
+# matches the manifest id, the release zip, and the mod-index entry).
 #
 # Usage:
 #   pwsh install.ps1
@@ -15,7 +16,7 @@
 $ErrorActionPreference = 'Stop'
 
 $RepoDir = $PSScriptRoot
-$ModsDir = Join-Path $env:APPDATA "Balatro\Mods\BalatroAntelytics"
+$ModsDir = Join-Path $env:APPDATA "Balatro\Mods\Antelytics"
 
 Write-Host ("Source : {0}" -f $RepoDir)
 Write-Host ("Target : {0}" -f $ModsDir)
