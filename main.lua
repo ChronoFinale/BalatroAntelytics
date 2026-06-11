@@ -207,6 +207,7 @@ function mod.reset_game_globals(run_start)
         run_state.pack_close_pending      = false
         run_state.last_opponent_hands     = nil
         run_state.pending_mp_end          = nil
+        run_state.opp_stats               = nil
         run_state.last_action_timestamp   = nil
         run_state.emitted_this_round      = {}
         run_state.emitted_skip_slots      = {}
@@ -300,6 +301,11 @@ local function build_mp_summary()
             player_reroll_cost_total = mp.player_reroll_cost_total(),
             opponent_end_game_jokers = mp.opponent_end_game_jokers(),
             opponent_nemesis_deck    = mp.opponent_nemesis_deck(),
+            -- Opponent rerolls + vouchers, intercepted off the nemesisEndGameStats
+            -- network message (see love.update) since the mod discards it.
+            opponent_reroll_count      = run_state.opp_stats and run_state.opp_stats.reroll_count,
+            opponent_reroll_cost_total = run_state.opp_stats and run_state.opp_stats.reroll_cost_total,
+            opponent_vouchers          = run_state.opp_stats and run_state.opp_stats.vouchers,
             lobby_config             = mp.lobby_config(),
         }
     end)
@@ -1336,6 +1342,42 @@ end
 local original_love_update = love.update
 
 love.update = function(dt)
+    -- Intercept the opponent's end-game stats (rerolls + vouchers) BEFORE the
+    -- engine drains the network channel below. The MP mod dispatches the
+    -- nemesisEndGameStats message through a noop handler (action_handlers.lua:
+    -- 1357), so it's never stored anywhere. We read it off the inbound
+    -- "networkToUi" channel during the match-end window and re-push every
+    -- message in its original order (pop-front + push-back, getCount() times =
+    -- one full rotation) so the mod still receives all of them. Bounded to
+    -- pending_mp_end and to a single capture, so it never touches the channel
+    -- during normal play.
+    if run_state.pending_mp_end and not run_state.opp_stats and mp and mp.enabled then
+        pcall(function()
+            local ch = love.thread.getChannel("networkToUi")
+            local count = ch:getCount()
+            for _ = 1, count do
+                local m = ch:pop()
+                if m == nil then break end
+                ch:push(m)
+                if type(m) == "string" and m:find("nemesisEndGameStats", 1, true) then
+                    local rc  = m:match('"reroll_count":%s*(%-?%d+)')
+                    local rct = m:match('"reroll_cost_total":%s*(%-?%d+)')
+                    local vch = m:match('"vouchers":%s*"([^"]*)"')
+                    local vouchers = nil
+                    if vch and vch ~= "" then
+                        vouchers = {}
+                        for id in vch:gmatch("[^%-]+") do vouchers[#vouchers + 1] = id end
+                    end
+                    run_state.opp_stats = {
+                        reroll_count      = rc and tonumber(rc) or nil,
+                        reroll_cost_total = rct and tonumber(rct) or nil,
+                        vouchers          = vouchers,
+                    }
+                end
+            end
+        end)
+    end
+
     if original_love_update then original_love_update(dt) end
 
     hooks.retry_deferred_hooks(Logger)

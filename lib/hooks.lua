@@ -155,6 +155,11 @@ local function build_pvp_summary(mp)
             -- finalize synchronously (solo/interrupted), where it stays nil.
             opponent_end_game_jokers = mp.opponent_end_game_jokers(),
             opponent_nemesis_deck    = mp.opponent_nemesis_deck(),
+            -- Opponent rerolls + vouchers, intercepted off the network channel
+            -- (see main.lua love.update) since the MP mod discards the message.
+            opponent_reroll_count      = state.opp_stats and state.opp_stats.reroll_count,
+            opponent_reroll_cost_total = state.opp_stats and state.opp_stats.reroll_cost_total,
+            opponent_vouchers          = state.opp_stats and state.opp_stats.vouchers,
             lobby_config             = mp.lobby_config(),
         }
     end)
