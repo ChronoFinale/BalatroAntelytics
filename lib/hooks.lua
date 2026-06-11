@@ -149,6 +149,11 @@ local function build_pvp_summary(mp)
             opponent_sells           = mp.opponent_sells(),
             player_reroll_count      = mp.player_reroll_count(),
             player_reroll_cost_total = mp.player_reroll_cost_total(),
+            -- Usually nil here: the opponent's end-game jokers arrive a few
+            -- frames after match end (async pull). The deferred finalize in
+            -- main.lua waits for them; this is the fallback for paths that
+            -- finalize synchronously (solo/interrupted), where it stays nil.
+            opponent_end_game_jokers = mp.opponent_end_game_jokers(),
             lobby_config             = mp.lobby_config(),
         }
     end)
@@ -175,10 +180,14 @@ function hooks.register_all(deps)
     -- a play_hand with no result node. Gated on being in an MP lobby
     -- (MP.LOBBY.code) so solo runs (no lobby) are untouched. Records the final
     -- scores/lives via build_game_state and the authoritative outcome.
+    -- Emit the terminal MP node and report whether this was an MP match (i.e.
+    -- we're in a lobby). Callers use the return to decide between deferring the
+    -- finalize (MP — wait for the async opponent end-game pull) and finalizing
+    -- synchronously (solo).
     local function record_mp_match_end(outcome)
         local MP = rawget(_G, "MP")
         local ok, code = pcall(function() return MP and MP.LOBBY and MP.LOBBY.code end)
-        if not (ok and code ~= nil) then return end
+        if not (ok and code ~= nil) then return false end
         pcall(function()
             recorder:send({
                 index  = recorder:next_index(),
@@ -186,6 +195,19 @@ function hooks.register_all(deps)
                 action = { type = "game_over", outcome = outcome },
             })
         end)
+        return true
+    end
+
+    -- Defer an MP run's finalize so the update loop can wait for the opponent's
+    -- end-game jokers (async pull) before writing the file. Solo runs finalize
+    -- immediately. See main.lua's pending_mp_end handling.
+    local function finalize_or_defer(outcome, final_ante)
+        local is_mp = record_mp_match_end(outcome)
+        if is_mp then
+            state.pending_mp_end = { outcome = outcome, final_ante = final_ante, frames = 0 }
+        else
+            recorder:end_run(outcome, final_ante, build_pvp_summary(mp))
+        end
     end
 
     -- -----------------------------------------------------------------------
@@ -628,8 +650,7 @@ function hooks.register_all(deps)
             if G and G.GAME and G.GAME.round_resets and G.GAME.round_resets.ante then
                 final_ante = G.GAME.round_resets.ante
             end
-            record_mp_match_end("win")
-            recorder:end_run("win", final_ante, build_pvp_summary(mp))
+            finalize_or_defer("win", final_ante)
             if logger.info then logger.info("Run ended: win (ante " .. tostring(final_ante) .. ")") end
         end)
         if not ok then log_error(logger, "win_game", err) end
@@ -646,8 +667,7 @@ function hooks.register_all(deps)
             pcall(function()
                 final_ante = G.GAME.round_resets.ante or 1
             end)
-            record_mp_match_end("loss")
-            recorder:end_run("loss", final_ante, build_pvp_summary(mp))
+            finalize_or_defer("loss", final_ante)
             if logger.info then logger.info("Run ended: loss (ante " .. tostring(final_ante) .. ")") end
         end)
         return original(...)

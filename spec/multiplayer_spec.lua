@@ -385,4 +385,75 @@ describe("Multiplayer accessor module", function()
             assert.is_false(mp.enabled)
         end)
     end)
+
+    -- -----------------------------------------------------------------------
+    -- Opponent end-game jokers (the async match-end pull)
+    -- -----------------------------------------------------------------------
+    describe("opponent_end_game_jokers", function()
+        -- A CardArea:save() entry as produced by G.jokers:save() (card.lua:4625):
+        -- the center key lives at save_fields.center, the name at ability.name,
+        -- the edition is a table like {holo=true}.
+        local function joker_save(center, name, edition)
+            return { save_fields = { center = center }, ability = { name = name }, edition = edition }
+        end
+
+        it("_decode_joker_save maps a CardArea save to {id,name,edition,slot}", function()
+            local save = { cards = {
+                joker_save("j_blueprint", "Blueprint", nil),
+                joker_save("j_baron", "Baron", { holo = true }),
+                joker_save("j_dna", "DNA", { polychrome = true }),
+            } }
+            local list = Multiplayer._decode_joker_save(save)
+            assert.are.equal(3, #list)
+            assert.are.same({ id = "j_blueprint", name = "Blueprint", slot = 1, edition = "base" }, list[1])
+            assert.are.equal("j_baron", list[2].id)
+            assert.are.equal("holographic", list[2].edition)
+            assert.are.equal("polychrome", list[3].edition)
+        end)
+
+        it("_decode_joker_save returns nil for a non-table / missing cards", function()
+            assert.is_nil(Multiplayer._decode_joker_save(nil))
+            assert.is_nil(Multiplayer._decode_joker_save({}))
+            assert.is_nil(Multiplayer._decode_joker_save("nope"))
+        end)
+
+        it("returns nil when no payload has arrived yet", function()
+            _G.MP = { UTILS = { str_decode_and_unpack = function() return {} end } }
+            local mp = Multiplayer.new({ logger = make_capturing_logger(), pvp_enabled = true })
+            assert.is_nil(mp.opponent_end_game_jokers())
+        end)
+
+        it("returns an empty list when the opponent held no jokers (keys = {})", function()
+            -- The mod sends keys={} (a table) when G.jokers is empty.
+            _G.MP = { end_game_jokers_payload = {}, UTILS = { str_decode_and_unpack = function() return nil end } }
+            local mp = Multiplayer.new({ logger = make_capturing_logger(), pvp_enabled = true })
+            assert.are.same({}, mp.opponent_end_game_jokers())
+        end)
+
+        it("decodes a string payload via the mod's str_decode_and_unpack", function()
+            _G.MP = {
+                end_game_jokers_payload = "BASE64BLOB",
+                UTILS = {
+                    str_decode_and_unpack = function(s)
+                        assert.are.equal("BASE64BLOB", s)
+                        return { cards = { joker_save("j_joker", "Joker", { foil = true }) } }
+                    end,
+                },
+            }
+            local mp = Multiplayer.new({ logger = make_capturing_logger(), pvp_enabled = true })
+            local list = mp.opponent_end_game_jokers()
+            assert.are.equal(1, #list)
+            assert.are.equal("j_joker", list[1].id)
+            assert.are.equal("foil", list[1].edition)
+        end)
+
+        it("returns nil (not a crash) when decode throws", function()
+            _G.MP = {
+                end_game_jokers_payload = "GARBAGE",
+                UTILS = { str_decode_and_unpack = function() error("bad blob") end },
+            }
+            local mp = Multiplayer.new({ logger = make_capturing_logger(), pvp_enabled = true })
+            assert.is_nil(mp.opponent_end_game_jokers())
+        end)
+    end)
 end)

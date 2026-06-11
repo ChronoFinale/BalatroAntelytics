@@ -206,6 +206,7 @@ function mod.reset_game_globals(run_start)
         run_state.current_pack_selects    = 0
         run_state.pack_close_pending      = false
         run_state.last_opponent_hands     = nil
+        run_state.pending_mp_end          = nil
         run_state.last_action_timestamp   = nil
         run_state.emitted_this_round      = {}
         run_state.emitted_skip_slots      = {}
@@ -285,6 +286,26 @@ end
 -- ---------------------------------------------------------------------------
 -- Hooks (monkey-patches for things without SMODS contexts)
 -- ---------------------------------------------------------------------------
+-- Build the run-level PvP summary written at end_run. Mirrors hooks.lua's
+-- build_pvp_summary; defined here too so the deferred MP finalize and the
+-- love.quit path (both in this file) can build it. opponent_end_game_jokers is
+-- nil until the async match-end pull lands — the deferred finalize waits for it.
+local function build_mp_summary()
+    if not (mp and mp.enabled) then return nil end
+    local ok, summary = pcall(function()
+        return {
+            opponent_shop_spending   = mp.opponent_shop_spending(),
+            opponent_sells           = mp.opponent_sells(),
+            player_reroll_count      = mp.player_reroll_count(),
+            player_reroll_cost_total = mp.player_reroll_cost_total(),
+            opponent_end_game_jokers = mp.opponent_end_game_jokers(),
+            lobby_config             = mp.lobby_config(),
+        }
+    end)
+    if ok then return summary end
+    return nil
+end
+
 local deps = {
     capture             = Capture,
     serializer          = Serializer,
@@ -1344,6 +1365,30 @@ love.update = function(dt)
         end
     end
 
+    -- Deferred MP finalize: win_game / create_UIBox_game_over set
+    -- run_state.pending_mp_end (instead of finalizing) so we can wait a few
+    -- frames for the asynchronous end-of-match pull — the opponent's final
+    -- jokers (MP.end_game_jokers_payload) arrive over the network after our end
+    -- screen opens. Finalize as soon as they land, or after a ~3s timeout so a
+    -- missing pull (client dismissed the screen too fast, opponent disconnected)
+    -- can never hang the run. The frame budget is generous; the payload normally
+    -- arrives within a handful of frames.
+    if recorder:is_active() and run_state.pending_mp_end then
+        local p = run_state.pending_mp_end
+        p.frames = (p.frames or 0) + 1
+        local jokers = mp and mp.enabled and mp.opponent_end_game_jokers() or nil
+        if jokers ~= nil or p.frames > 180 then
+            local summary = build_mp_summary() or {}
+            -- Prefer the freshly-read jokers; build_mp_summary may have read them
+            -- a frame earlier as nil.
+            if jokers ~= nil then summary.opponent_end_game_jokers = jokers end
+            pcall(function() recorder:end_run(p.outcome, p.final_ante, summary) end)
+            run_state.pending_mp_end = nil
+            Logger.info("Antelytics: finalized MP run (" .. tostring(p.outcome)
+                .. ", opponent jokers: " .. (jokers and tostring(#jokers) or "unavailable") .. ")")
+        end
+    end
+
     -- Opponent PvP scoring detection: watch for MP.GAME.enemy.hands decreasing.
     if recorder:is_active() and mp and mp.enabled then
         local ok, enemy = pcall(function()
@@ -1412,23 +1457,23 @@ love.quit = function()
             return G and G.GAME and G.GAME.round_resets and G.GAME.round_resets.ante
         end)
         if ok and type(value) == "number" then final_ante = value end
-        local pvp_summary = nil
-        if mp and mp.enabled then
-            local ok2, summary = pcall(function()
-                return {
-                    opponent_shop_spending   = mp.opponent_shop_spending(),
-                    opponent_sells           = mp.opponent_sells(),
-                    player_reroll_count      = mp.player_reroll_count(),
-                    player_reroll_cost_total = mp.player_reroll_cost_total(),
-                    lobby_config             = mp.lobby_config(),
-                }
+        if run_state.pending_mp_end then
+            -- A match ended and we were still waiting for the opponent's
+            -- end-game pull when the player quit. Finalize with the REAL
+            -- outcome (win/loss), not "interrupted", and whatever build data
+            -- has arrived by now.
+            local p = run_state.pending_mp_end
+            pcall(function()
+                recorder:end_run(p.outcome, p.final_ante or final_ante, build_mp_summary())
             end)
-            if ok2 then pvp_summary = summary end
+            run_state.pending_mp_end = nil
+            Logger.info("Antelytics: finalised deferred MP run on quit (" .. tostring(p.outcome) .. ")")
+        else
+            pcall(function()
+                recorder:end_run("interrupted", final_ante, build_mp_summary())
+            end)
+            Logger.info("Antelytics: finalised interrupted run on quit")
         end
-        pcall(function()
-            recorder:end_run("interrupted", final_ante, pvp_summary)
-        end)
-        Logger.info("Antelytics: finalised interrupted run on quit")
     end
     Logger.flush()
     if original_love_quit then return original_love_quit() end

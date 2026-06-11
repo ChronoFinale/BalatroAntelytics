@@ -106,6 +106,51 @@ local function get_G()
     return rawget(_G, "G")
 end
 
+-- Normalize a Balatro edition value to the string the viewer uses. An edition
+-- is a table like {foil=true} / {holo=true} / {polychrome=true} / {negative=true}
+-- (or a bare string). Mirrors build_joker_list in capture.lua so the opponent's
+-- end-game jokers carry the same edition shape as the local jokers.
+local function edition_string(ed)
+    if type(ed) == "string" then return ed end
+    if type(ed) == "table" then
+        if ed.foil then return "foil"
+        elseif ed.holo then return "holographic"
+        elseif ed.polychrome then return "polychrome"
+        elseif ed.negative then return "negative" end
+    end
+    return "base"
+end
+
+-- Decode a CardArea:save() table (the structure produced by G.jokers:save() and
+-- carried in the opponent's end-game jokers payload) into the same
+-- {id, name, edition, slot} joker shape the rest of the capture emits. Each
+-- card save stores the center key in save_fields.center (card.lua:4625) and the
+-- display name in ability.name.
+local function decode_joker_save(card_area_save)
+    if type(card_area_save) ~= "table" then return nil end
+    local cards = card_area_save.cards
+    if type(cards) ~= "table" then return nil end
+    local list = {}
+    for i = 1, #cards do
+        local c = cards[i]
+        if type(c) == "table" then
+            local id   = c.save_fields and c.save_fields.center
+            local name = c.ability and c.ability.name
+            local entry = {
+                id      = id and tostring(id) or "j_unknown",
+                name    = name and tostring(name) or nil,
+                slot    = i,
+                edition = edition_string(c.edition),
+            }
+            if type(c.sort_id) == "number" then entry.sort_id = c.sort_id end
+            list[#list + 1] = entry
+        end
+    end
+    return list
+end
+-- Exposed for unit tests; not part of the accessor contract.
+Multiplayer._decode_joker_save = decode_joker_save
+
 -- The opponent's score (MP.GAME.enemy.score) is an EASED display value: the MP
 -- mod queues three vanilla "ease" events that lerp the INSANE_INT sub-fields
 -- (coeffiocient/exponent/e_count) toward the new target over ~3 frames
@@ -372,6 +417,28 @@ function Multiplayer.new(opts)
         opponent_shop_spending = make_accessor("opponent_shop_spending", function()
             local mp = get_mp_global()
             return mp.GAME and mp.GAME.enemy and mp.GAME.enemy.spent_in_shop
+        end),
+
+        -- Opponent's FINAL jokers — knowable only after the match-end pull lands.
+        -- When our end screen opens, the mod requests the opponent's build and
+        -- stores the reply in MP.end_game_jokers_payload (a base64/gzip/STR_PACK
+        -- CardArea save; receiveEndGameJokers, action_handlers.lua:774). We decode
+        -- it with the mod's own helper. Returns nil until the payload arrives (the
+        -- caller polls), or an empty list when the opponent held no jokers (the
+        -- mod sends keys={} in that case).
+        opponent_end_game_jokers = make_accessor("opponent_end_game_jokers", function()
+            local mp = get_mp_global()
+            local payload = mp and mp.end_game_jokers_payload
+            -- keys = {} (a table) is the explicit "no jokers" reply.
+            if type(payload) == "table" then return {} end
+            if type(payload) ~= "string" or payload == "" then return nil end
+            local utils = mp.UTILS
+            if not (utils and type(utils.str_decode_and_unpack) == "function") then
+                return nil
+            end
+            local ok, save = pcall(utils.str_decode_and_unpack, payload)
+            if not ok or type(save) ~= "table" then return nil end
+            return decode_joker_save(save)
         end),
 
         -- Opponent's total joker sells
