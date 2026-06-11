@@ -456,4 +456,47 @@ describe("Multiplayer accessor module", function()
             assert.is_nil(mp.opponent_end_game_jokers())
         end)
     end)
+
+    -- -----------------------------------------------------------------------
+    -- Opponent end-game deck (the nemesis deck string)
+    -- -----------------------------------------------------------------------
+    describe("opponent_nemesis_deck", function()
+        it("_parse_nemesis_deck maps suit-rank-enh-edition-seal tokens", function()
+            -- Leading ";" (the mod prefixes each card with it) is skipped.
+            local list = Multiplayer._parse_nemesis_deck(
+                ";S-A-none-none-none;H-T-m_gold-foil-Gold;C-2-m_steel-holo-none")
+            assert.are.equal(3, #list)
+            assert.are.same(
+                { suit = "Spades", rank = "Ace", enhancement = "none", edition = "base", seal = "none" },
+                list[1])
+            assert.are.same(
+                { suit = "Hearts", rank = "10", enhancement = "gold", edition = "foil", seal = "Gold" },
+                list[2])
+            assert.are.same(
+                { suit = "Clubs", rank = "2", enhancement = "steel", edition = "holographic", seal = "none" },
+                list[3])
+        end)
+
+        it("_parse_nemesis_deck returns nil for empty / non-string", function()
+            assert.is_nil(Multiplayer._parse_nemesis_deck(""))
+            assert.is_nil(Multiplayer._parse_nemesis_deck(nil))
+        end)
+
+        it("accessor returns nil until the deck string arrives", function()
+            _G.MP = {}
+            local mp = Multiplayer.new({ logger = make_capturing_logger(), pvp_enabled = true })
+            assert.is_nil(mp.opponent_nemesis_deck())
+        end)
+
+        it("accessor parses MP.nemesis_deck_string when present", function()
+            _G.MP = { nemesis_deck_string = ";D-K-none-polychrome-none;S-9-none-none-Red" }
+            local mp = Multiplayer.new({ logger = make_capturing_logger(), pvp_enabled = true })
+            local list = mp.opponent_nemesis_deck()
+            assert.are.equal(2, #list)
+            assert.are.equal("Diamonds", list[1].suit)
+            assert.are.equal("King", list[1].rank)
+            assert.are.equal("polychrome", list[1].edition)
+            assert.are.equal("Red", list[2].seal)
+        end)
+    end)
 end)

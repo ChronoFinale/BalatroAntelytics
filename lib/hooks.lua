@@ -154,6 +154,7 @@ local function build_pvp_summary(mp)
             -- main.lua waits for them; this is the fallback for paths that
             -- finalize synchronously (solo/interrupted), where it stays nil.
             opponent_end_game_jokers = mp.opponent_end_game_jokers(),
+            opponent_nemesis_deck    = mp.opponent_nemesis_deck(),
             lobby_config             = mp.lobby_config(),
         }
     end)

@@ -151,6 +151,45 @@ end
 -- Exposed for unit tests; not part of the accessor contract.
 Multiplayer._decode_joker_save = decode_joker_save
 
+-- Parse one card from the MP nemesis-deck string. The mod encodes each card as
+-- "suit-rank-enhancement-edition-seal" (lib/card_utils.lua:24 card_to_string):
+-- suit = S/H/C/D, rank = 2..9 or T/J/Q/K/A, enhancement = a center key
+-- ("m_gold", or "c_base"/"none" for plain), edition = foil/holo/polychrome/
+-- negative/none, seal = Gold/Red/Blue/Purple/none. Normalizes to the same
+-- {rank,suit,enhancement,edition,seal} shape as our own deck cards.
+local DECK_SUIT  = { S = "Spades", H = "Hearts", C = "Clubs", D = "Diamonds" }
+local DECK_RANK  = { T = "10", J = "Jack", Q = "Queen", K = "King", A = "Ace" }
+local DECK_EDITION = {
+    none = "base", foil = "foil", holo = "holographic",
+    polychrome = "polychrome", negative = "negative",
+}
+local function parse_nemesis_card(str)
+    local parts = {}
+    for p in tostring(str):gmatch("[^-]+") do parts[#parts + 1] = p end
+    if #parts < 2 then return nil end
+    local enh = parts[3] or "none"
+    enh = enh:match("^m_(.+)") or "none"   -- m_gold -> gold; c_base/none -> none
+    return {
+        suit        = DECK_SUIT[parts[1]] or parts[1],
+        rank        = DECK_RANK[parts[2]] or parts[2],
+        enhancement = enh,
+        edition     = DECK_EDITION[parts[4] or "none"] or "base",
+        seal        = parts[5] or "none",
+    }
+end
+
+-- Parse the whole ";"-delimited nemesis deck string into a card list.
+local function parse_nemesis_deck(deck_str)
+    if type(deck_str) ~= "string" or deck_str == "" then return nil end
+    local list = {}
+    for token in deck_str:gmatch("[^;]+") do
+        local card = parse_nemesis_card(token)
+        if card then list[#list + 1] = card end
+    end
+    return list
+end
+Multiplayer._parse_nemesis_deck = parse_nemesis_deck
+
 -- The opponent's score (MP.GAME.enemy.score) is an EASED display value: the MP
 -- mod queues three vanilla "ease" events that lerp the INSANE_INT sub-fields
 -- (coeffiocient/exponent/e_count) toward the new target over ~3 frames
@@ -439,6 +478,16 @@ function Multiplayer.new(opts)
             local ok, save = pcall(utils.str_decode_and_unpack, payload)
             if not ok or type(save) ~= "table" then return nil end
             return decode_joker_save(save)
+        end),
+
+        -- Opponent's FINAL deck — like the jokers, knowable only after the
+        -- match-end pull lands. The mod stores the reply as a plaintext
+        -- ";"-delimited card string in MP.nemesis_deck_string (receiveNemesisDeck,
+        -- action_handlers.lua:903). Parsed into our {rank,suit,...} card shape.
+        -- Returns nil until the payload arrives.
+        opponent_nemesis_deck = make_accessor("opponent_nemesis_deck", function()
+            local mp = get_mp_global()
+            return parse_nemesis_deck(mp and mp.nemesis_deck_string)
         end),
 
         -- Opponent's total joker sells

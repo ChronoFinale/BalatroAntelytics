@@ -299,6 +299,7 @@ local function build_mp_summary()
             player_reroll_count      = mp.player_reroll_count(),
             player_reroll_cost_total = mp.player_reroll_cost_total(),
             opponent_end_game_jokers = mp.opponent_end_game_jokers(),
+            opponent_nemesis_deck    = mp.opponent_nemesis_deck(),
             lobby_config             = mp.lobby_config(),
         }
     end)
@@ -1377,15 +1378,21 @@ love.update = function(dt)
         local p = run_state.pending_mp_end
         p.frames = (p.frames or 0) + 1
         local jokers = mp and mp.enabled and mp.opponent_end_game_jokers() or nil
-        if jokers ~= nil or p.frames > 180 then
+        local deck   = mp and mp.enabled and mp.opponent_nemesis_deck() or nil
+        -- Finalize once BOTH the opponent's jokers and deck have landed (they
+        -- arrive a few frames apart), or after the timeout so a slow/missing
+        -- pull can't hang the run.
+        if (jokers ~= nil and deck ~= nil) or p.frames > 180 then
             local summary = build_mp_summary() or {}
-            -- Prefer the freshly-read jokers; build_mp_summary may have read them
+            -- Prefer the freshly-read values; build_mp_summary may have read them
             -- a frame earlier as nil.
             if jokers ~= nil then summary.opponent_end_game_jokers = jokers end
+            if deck   ~= nil then summary.opponent_nemesis_deck    = deck end
             pcall(function() recorder:end_run(p.outcome, p.final_ante, summary) end)
             run_state.pending_mp_end = nil
             Logger.info("Antelytics: finalized MP run (" .. tostring(p.outcome)
-                .. ", opponent jokers: " .. (jokers and tostring(#jokers) or "unavailable") .. ")")
+                .. ", opp jokers: " .. (jokers and tostring(#jokers) or "—")
+                .. ", opp deck: " .. (deck and tostring(#deck) or "—") .. ")")
         end
     end
 
