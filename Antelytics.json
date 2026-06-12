@@ -6,7 +6,7 @@
   "description": "Built for Balatro Multiplayer: records every player decision during a run (including PvP scoring) and writes it to a single gzipped JSON file. Open it in the Antelytics viewer (www.antelytics.gg) to step through the run ante by ante.",
   "prefix": "antelytics",
   "main_file": "main.lua",
-  "version": "1.1.0~alpha",
+  "version": "1.2.0~alpha",
   "priority": 10000001,
   "badge_colour": "2E86DE",
   "badge_text_colour": "FFFFFF",
