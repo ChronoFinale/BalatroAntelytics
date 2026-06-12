@@ -1222,30 +1222,43 @@ function mod.calculate(self, context, ret)
     -- PvP round ended (multiplayer-only). Fires when both players have
     -- finished a Boss/PvP blind. The state we capture here carries the
     -- final scores, lives changes, and who won via state.pvp.
-    if context.mp_end_of_pvp and latch_once("pvp_round_ended") then
+    --
+    -- GATE on the blind actually being a PvP/nemesis blind: context.mp_end_of_pvp
+    -- was observed firing on a regular blind too (ante-1 Big Blind), which
+    -- emitted a bogus pvp_round_ended with opponent score 0 — the viewer then
+    -- showed a fake "Won PvP Blind / opponent lost a life" on a non-PvP blind.
+    -- blind_slot is "pvp" only for bl_mp_nemesis. Check before latching so the
+    -- latch isn't consumed by the spurious fire (which would suppress the real
+    -- PvP blind later).
+    if context.mp_end_of_pvp then
         local pvp_state = Capture.build_game_state("pvp_round_ended")
-        local won_round = false
-        if mp and mp.enabled and pvp_state.pvp then
-            -- Scores can be plain numbers OR decoded INSANE_INT strings
-            -- ("4.07e12"), so parse with tonumber before comparing — the old
-            -- `type == "number"` guard left won_round false for big scores.
-            -- Compare against opponent_hand_score (enemy.score = THIS blind),
-            -- not the all-time-max running score.
-            local me  = tonumber(pvp_state.pvp.player_running_score)
-            local opp = tonumber(pvp_state.pvp.opponent_hand_score)
-                or tonumber(pvp_state.pvp.opponent_running_score)
-            if me and opp then
-                won_round = me > opp
+        -- Only a real PvP/nemesis blind (slot "pvp") ends a PvP round. Check
+        -- before latching so a spurious fire on a regular blind doesn't consume
+        -- the latch and suppress the real PvP blind later.
+        if pvp_state.blind_slot == "pvp" and latch_once("pvp_round_ended") then
+            local won_round = false
+            if mp and mp.enabled and pvp_state.pvp then
+                -- Scores can be plain numbers OR decoded INSANE_INT strings
+                -- ("4.07e12"), so parse with tonumber before comparing — the old
+                -- `type == "number"` guard left won_round false for big scores.
+                -- Compare against opponent_hand_score (enemy.score = THIS blind),
+                -- not the all-time-max running score.
+                local me  = tonumber(pvp_state.pvp.player_running_score)
+                local opp = tonumber(pvp_state.pvp.opponent_hand_score)
+                    or tonumber(pvp_state.pvp.opponent_running_score)
+                if me and opp then
+                    won_round = me > opp
+                end
             end
+            record_action("pvp_round_ended", {
+                type      = "pvp_round_ended",
+                won_round = won_round,
+            })
+            -- Bug E Open Question 5 resolution: PvP runs flush at the same
+            -- per-blind granularity as solo runs. Without this, a PvP run
+            -- loses every PvP blind's worth of nodes on a mid-blind crash.
+            pcall(function() file_writer:flush_partial() end)
         end
-        record_action("pvp_round_ended", {
-            type      = "pvp_round_ended",
-            won_round = won_round,
-        })
-        -- Bug E Open Question 5 resolution: PvP runs flush at the same
-        -- per-blind granularity as solo runs. Without this, a PvP run
-        -- loses every PvP blind's worth of nodes on a mid-blind crash.
-        pcall(function() file_writer:flush_partial() end)
     end
 
     -- Tag added to the player's tag stack. Fires for skip-blind picks,
