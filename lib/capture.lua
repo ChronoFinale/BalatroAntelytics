@@ -559,6 +559,21 @@ local function build_joker_list(joker_cards)
             entry.seal = tostring(joker.seal)
         end
 
+        -- Stickers (eternal / perishable / rental) live on ability as booleans.
+        -- Perishable also tracks the rounds-left countdown in perish_tally.
+        -- Surfaced as explicit entry fields so the viewer can render the badge
+        -- without digging through internal_state.
+        if joker.ability then
+            if joker.ability.eternal then entry.eternal = true end
+            if joker.ability.perishable then
+                entry.perishable = true
+                if type(joker.ability.perish_tally) == "number" then
+                    entry.perish_tally = joker.ability.perish_tally
+                end
+            end
+            if joker.ability.rental then entry.rental = true end
+        end
+
         -- Internal state: capture only the mutable ability fields that carry
         -- meaningful information about this joker's current state.
         --
