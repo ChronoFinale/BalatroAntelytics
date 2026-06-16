@@ -589,6 +589,23 @@ describe("Capture module", function()
             assert.is_true(types["pack"])
             assert.is_true(types["consumable"])
         end)
+
+        it("describe_card captures stickers (eternal / perishable / rental) on a shop joker", function()
+            local card = {
+                config = { center = { key = "j_joker", set = "Joker" } },
+                ability = {
+                    name = "Joker", set = "Joker",
+                    eternal = true, perishable = true, perish_tally = 3,
+                },
+                cost = 4,
+            }
+            local d = Capture.describe_card(card)
+            assert.is_true(d.eternal)
+            assert.is_true(d.perishable)
+            assert.are.equal(3, d.perish_tally)
+            -- Absent stickers stay unset (not false), matching owned-joker entries.
+            assert.is_nil(d.rental)
+        end)
     end)
 
     -- -----------------------------------------------------------------------

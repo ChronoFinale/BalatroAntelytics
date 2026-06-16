@@ -1269,6 +1269,21 @@ function Capture.describe_card(card)
         end
 
         if card.seal then description.seal = tostring(card.seal) end
+
+        -- Stickers (eternal / perishable / rental) live on ability as booleans,
+        -- same as owned jokers. Shop-offered jokers can carry them too (Eternal
+        -- at Black Stake+, Perishable at Orange+, Rental at Gold), so capture
+        -- them here or the shop-offer joker loses its sticker badge.
+        if card.ability then
+            if card.ability.eternal then description.eternal = true end
+            if card.ability.perishable then
+                description.perishable = true
+                if type(card.ability.perish_tally) == "number" then
+                    description.perish_tally = card.ability.perish_tally
+                end
+            end
+            if card.ability.rental then description.rental = true end
+        end
     end)
 
     if not ok then
