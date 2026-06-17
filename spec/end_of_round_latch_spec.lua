@@ -428,13 +428,28 @@ describe("preservation: other per-round latches emit at most once per round", fu
     -- One unit test per latch — each documents the exact baseline the
     -- Bug A fix must not regress.
     for _, latch in ipairs(PRESERVATION_LATCHES) do
-        it(latch.context_flag .. " latches once per round (10 dispatches → 1 " .. latch.action_type .. " node)", function()
-            dispatch_context_n_times(latch.context_flag, 10)
-            assert.are.equal(1, count_nodes_of_type(latch.action_type),
-                latch.context_flag .. " must emit exactly one " .. latch.action_type
-                .. " node per round on UNFIXED code")
-        end)
+        -- mp_end_of_pvp only emits on an actual PvP/nemesis blind
+        -- (blind_slot == "pvp"); fresh_round() arms "small", so it's covered
+        -- by its own test below rather than this generic loop.
+        if latch.context_flag ~= "mp_end_of_pvp" then
+            it(latch.context_flag .. " latches once per round (10 dispatches → 1 " .. latch.action_type .. " node)", function()
+                dispatch_context_n_times(latch.context_flag, 10)
+                assert.are.equal(1, count_nodes_of_type(latch.action_type),
+                    latch.context_flag .. " must emit exactly one " .. latch.action_type
+                    .. " node per round")
+            end)
+        end
     end
+
+    it("mp_end_of_pvp latches once per round on a PvP blind (10 dispatches → 1 pvp_round_ended node)", function()
+        -- pvp_round_ended is gated on the blind actually being a PvP/nemesis
+        -- blind (blind_slot == "pvp"); fresh_round() arms "small", so arm the
+        -- PvP slot here. build_game_state reads it via get_current_blind_slot.
+        mod_table.run_state.current_blind_slot = "pvp"
+        dispatch_context_n_times("mp_end_of_pvp", 10)
+        assert.are.equal(1, count_nodes_of_type("pvp_round_ended"),
+            "mp_end_of_pvp must emit exactly one pvp_round_ended node per round on a PvP blind")
+    end)
 
     -- Property test: any random interleaving of the six contexts within
     -- a single round (no resets between dispatches) must produce at
