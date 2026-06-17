@@ -4,6 +4,13 @@ All notable changes to the Antelytics capture mod. The companion viewer at
 [antelytics.gg](https://www.antelytics.gg) updates continuously and isn't tied
 to these versions.
 
+## v1.2.1-alpha
+
+- **Shop joker stickers captured** — eternal / perishable / rental are now
+  recorded on jokers offered in the shop (not just the ones you own), so a shop
+  joker's Eternal badge shows in the viewer. (Existing runs captured before this
+  won't have the data; new runs will.)
+
 ## v1.2.0-alpha
 
 - **Joker stickers captured** — eternal / perishable (with its rounds-left
