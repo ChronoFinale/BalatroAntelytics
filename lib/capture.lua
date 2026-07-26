@@ -322,6 +322,8 @@ local function build_card_entry(card)
                 edition = "holographic"
             elseif card.edition.polychrome then
                 edition = "polychrome"
+            elseif card.edition.negative then
+                edition = "negative"
             end
         elseif type(card.edition) == "string" then
             edition = card.edition
@@ -540,6 +542,12 @@ local function build_joker_list(joker_cards)
                     entry.edition = "holographic"
                 elseif joker.edition.polychrome then
                     entry.edition = "polychrome"
+                elseif joker.edition.negative then
+                    -- Negative jokers occupy 0 net slots (card.lua add_to_deck
+                    -- bumps card_limit +1) and roll from any create_card, incl.
+                    -- Riff-Raff / Perkeo / Aura. Vanilla editions are mutually
+                    -- exclusive, so this elseif is complete.
+                    entry.edition = "negative"
                 end
             elseif type(joker.edition) == "string" then
                 entry.edition = joker.edition

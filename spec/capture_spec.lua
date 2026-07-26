@@ -408,6 +408,15 @@ describe("Capture module", function()
             assert.are.equal("base", state.jokers[2].edition)
         end)
 
+        it("captures the negative edition (Riff-Raff / Perkeo / Aura output)", function()
+            -- Regression: card.edition.negative was previously unhandled, so a
+            -- Negative joker recorded as "base" and the viewer showed no badge.
+            G.jokers.cards[2].edition = { negative = true, type = "negative" }
+            local state = Capture.build_game_state("play_hand")
+
+            assert.are.equal("negative", state.jokers[2].edition)
+        end)
+
         it("captures joker internal_state maps", function()
             local state = Capture.build_game_state("play_hand")
 
