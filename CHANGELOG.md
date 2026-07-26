@@ -4,6 +4,13 @@ All notable changes to the Antelytics capture mod. The companion viewer at
 [antelytics.gg](https://www.antelytics.gg) updates continuously and isn't tied
 to these versions.
 
+## v1.2.2-alpha
+
+- **Negative edition captured** — a Negative joker (from Riff-Raff, Perkeo, Aura,
+  or any edition roll) was being recorded as a plain base joker, so the viewer
+  showed no edition badge and you couldn't tell it was Negative. Now recorded on
+  both jokers and playing cards. (Existing runs won't have it; new runs will.)
+
 ## v1.2.1-alpha
 
 - **Shop joker stickers captured** — eternal / perishable / rental are now
