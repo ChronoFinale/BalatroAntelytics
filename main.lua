@@ -17,9 +17,11 @@
 ---   - love.update      polls for opponent hand plays during PvP blinds
 ---   - Gate             decides whether to record (PvP Attrition only for now)
 ---
---- Single-mode design: file output only. The HTTP path was removed because it
---- introduced two parallel send paths that drifted out of sync. Upload to a
---- backend is a separate concern and will live in a separate tool.
+--- File output is always on. "Antelytics Live" (lib/live_publisher.lua) is a
+--- second, independent sink wired through the same Recorder choke point: when
+--- opted in via config (live_enabled + live_url + live_token), each node is
+--- also POSTed to a live server, fire-and-forget. Off by default; zero cost
+--- when disabled.
 
 local mod = SMODS.current_mod
 local config = mod.config or {}
@@ -36,6 +38,7 @@ local Capture     = assert(SMODS.load_file("lib/capture.lua"))()
 local hooks       = assert(SMODS.load_file("lib/hooks.lua"))()
 local Multiplayer = assert(SMODS.load_file("lib/multiplayer.lua"))()
 local FileWriter  = assert(SMODS.load_file("lib/file_writer.lua"))()
+local LivePublisher = assert(SMODS.load_file("lib/live_publisher.lua"))()
 local Recorder    = assert(SMODS.load_file("lib/recorder.lua"))()
 local Gate        = assert(SMODS.load_file("lib/gamemode_gate.lua"))()
 local SkipBlindAction = assert(SMODS.load_file("lib/skip_blind_action.lua"))()
@@ -123,9 +126,19 @@ local file_writer = FileWriter.new({
     mod_path   = mod.path,
 })
 
-local recorder = Recorder.new({
-    file_writer = file_writer,
+-- Fire-and-forget live publishing (Antelytics Live). Off by default; a no-op
+-- unless config.live_enabled is true and both live_url/live_token are set.
+-- `config` here is the actual mod.config table, so runtime toggles apply.
+local live_publisher = LivePublisher.new({
+    config      = config,
     logger      = function(msg) Logger.warning(msg) end,
+    mod_version = mod.version,
+})
+
+local recorder = Recorder.new({
+    file_writer    = file_writer,
+    live_publisher = live_publisher,
+    logger         = function(msg) Logger.warning(msg) end,
 })
 
 -- Recover any runs that were interrupted by a previous crash. Each

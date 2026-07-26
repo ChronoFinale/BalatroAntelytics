@@ -12,16 +12,21 @@
 ---   recorder:next_index()        -- assign + increment seq
 ---   recorder:send(node)          -- record a Decision_Node
 ---   recorder:is_active()         -- whether we're currently recording
+---
+--- deps.live_publisher (optional) receives every node alongside the
+--- file_writer — see lib/live_publisher.lua. It is independent of
+--- file_writer: live publishing still happens even when file_writer is nil.
 
 local Recorder = {}
 Recorder.__index = Recorder
 
---- @param deps table { file_writer, logger }
+--- @param deps table { file_writer, live_publisher, logger }
 function Recorder.new(deps)
     deps = deps or {}
     return setmetatable({
-        file_writer = deps.file_writer,
-        logger      = deps.logger or function() end,
+        file_writer    = deps.file_writer,
+        live_publisher = deps.live_publisher,
+        logger         = deps.logger or function() end,
         -- Per-run state
         run_id = nil,
         seq    = 0,
@@ -57,15 +62,28 @@ function Recorder:next_index()
 end
 
 --- Append a Decision_Node to the current run.
---- Silently no-ops when not active.
+--- Silently no-ops when not active. file_writer and live_publisher are
+--- independent sinks: each node reaches whichever of them are configured
+--- (live publishing is NOT gated on file_writer being present).
 function Recorder:send(node)
     if not self.active then return end
-    if not self.file_writer then return end
-    local ok, err = pcall(function()
-        self.file_writer:append_node(node)
-    end)
-    if not ok then
-        self.logger("Recorder: send failed for node " .. tostring(node and node.index) .. ": " .. tostring(err))
+
+    if self.file_writer then
+        local ok, err = pcall(function()
+            self.file_writer:append_node(node)
+        end)
+        if not ok then
+            self.logger("Recorder: send failed for node " .. tostring(node and node.index) .. ": " .. tostring(err))
+        end
+    end
+
+    if self.live_publisher then
+        local ok, err = pcall(function()
+            self.live_publisher:publish(self.run_id, node)
+        end)
+        if not ok then
+            self.logger("Recorder: live publish failed for node " .. tostring(node and node.index) .. ": " .. tostring(err))
+        end
     end
 end
 
