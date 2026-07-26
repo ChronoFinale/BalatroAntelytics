@@ -39,6 +39,8 @@ local hooks       = assert(SMODS.load_file("lib/hooks.lua"))()
 local Multiplayer = assert(SMODS.load_file("lib/multiplayer.lua"))()
 local FileWriter  = assert(SMODS.load_file("lib/file_writer.lua"))()
 local LivePublisher = assert(SMODS.load_file("lib/live_publisher.lua"))()
+local Pairing     = assert(SMODS.load_file("lib/pairing.lua"))()
+local PairingUI   = assert(SMODS.load_file("lib/pairing_ui.lua"))()
 local Recorder    = assert(SMODS.load_file("lib/recorder.lua"))()
 local Gate        = assert(SMODS.load_file("lib/gamemode_gate.lua"))()
 local SkipBlindAction = assert(SMODS.load_file("lib/skip_blind_action.lua"))()
@@ -134,6 +136,21 @@ local live_publisher = LivePublisher.new({
     logger      = function(msg) Logger.warning(msg) end,
     mod_version = mod.version,
 })
+
+-- "Link account" pairing flow (Antelytics Live device-code pairing). Never
+-- hand-edit config.lua for the stream key: the mod config tab's "Link
+-- account" button drives this, and it's the only thing that writes
+-- config.live_token/linked_user. `config` is the actual mod.config table
+-- (by reference), same as live_publisher above, so approval/unlink are
+-- visible immediately without re-wiring. Registers G.FUNCS.antelytics_* and
+-- mod.config_tab; polling is driven from love.update below and is a no-op
+-- (zero network cost) whenever no pairing is in flight.
+local pairing = Pairing.new({
+    config = config,
+    logger = function(msg) Logger.warning(msg) end,
+})
+PairingUI.register_funcs(pairing)
+mod.config_tab = PairingUI.make_config_tab(pairing, config)
 
 local recorder = Recorder.new({
     file_writer    = file_writer,
@@ -1407,6 +1424,11 @@ love.update = function(dt)
     if original_love_update then original_love_update(dt) end
 
     hooks.retry_deferred_hooks(Logger)
+
+    -- "Link account" pairing poll. Pairing:tick() is a no-op (no network
+    -- call at all) unless a pairing is actually in flight and its poll
+    -- interval has elapsed — see lib/pairing.lua Pairing.should_poll.
+    pcall(function() pairing:tick() end)
 
     -- Idle-flush detector (Bug F): if the player returned to the main
     -- menu without triggering love.quit (e.g. via the in-game menu),
