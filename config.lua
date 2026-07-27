@@ -24,7 +24,11 @@ return {
   -- (publish-only) and can be revoked any time from the Config tab's
   -- "Unlink" button (or by generating a new one on antelytics.gg).
   live_enabled = false,
-  live_url     = "", -- e.g. "https://www.antelytics.gg"
+  -- Defaulted so "Link account" works out of the box: the pairing flow has to
+  -- call <live_url>/api/live/pair/start, so an empty value would break the very
+  -- flow that exists to avoid hand-editing this file. Not a secret, and enables
+  -- nothing on its own — live_enabled above is the actual switch.
+  live_url     = "https://www.antelytics.gg",
   live_token   = "", -- your stream key — set via "Link account" in-game, not by hand
   linked_user  = "", -- display name of the linked antelytics.gg account, if any
 }

@@ -6,10 +6,18 @@ to these versions.
 
 ## v1.2.2-alpha
 
-- **Negative edition captured** — a Negative joker (from Riff-Raff, Perkeo, Aura,
-  or any edition roll) was being recorded as a plain base joker, so the viewer
-  showed no edition badge and you couldn't tell it was Negative. Now recorded on
-  both jokers and playing cards. (Existing runs won't have it; new runs will.)
+- **Negative edition captured** — a Negative joker was being recorded as a plain
+  base joker, so the viewer showed no edition badge and you couldn't tell it was
+  Negative. (Existing runs won't have it; new runs will.)
+
+  Negative jokers come from **Riff-Raff**, the **Negative Tag**, **Ectoplasm**,
+  challenge starting jokers, or the flat **0.3%** edition roll on any newly
+  created joker — shop slot, Buffoon Pack, Judgement, The Soul, Wraith, and the
+  Top-up / Rare / Uncommon Tags.
+
+  The edition branch was added to the playing-card path too, but that is
+  defensive rather than a fix: vanilla cannot produce a Negative playing card
+  (Aura, Standard Packs and Illusion all exclude Negative from their rolls).
 
 ## v1.2.1-alpha
 
