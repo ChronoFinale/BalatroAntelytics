@@ -48,23 +48,35 @@ end
 --- (plain string fields, never nil) so "Waiting for approval...", the
 --- user_code, and the eventual "Linked as X" all update without the tab
 --- needing to be rebuilt.
+--- The code + status lines.
+---
+--- Returns a ROW, not a column. Balatro's UI nests row -> column -> row, and
+--- this block sits among G.UIT.R siblings — returning a bare G.UIT.C there put
+--- the text in the wrong place on screen. The column now lives INSIDE a row, so
+--- the alternation holds.
 local function status_block(pairing)
     return {
-        n = G.UIT.C,
+        n = G.UIT.R,
         config = { align = "cm", padding = 0.05 },
         nodes = {
             {
-                n = G.UIT.R,
+                n = G.UIT.C,
                 config = { align = "cm" },
                 nodes = {
-                    { n = G.UIT.T, config = { ref_table = pairing.display, ref_value = "user_code", scale = 0.8, colour = G.C.WHITE } },
-                },
-            },
-            {
-                n = G.UIT.R,
-                config = { align = "cm" },
-                nodes = {
-                    { n = G.UIT.T, config = { ref_table = pairing.display, ref_value = "status_text", scale = 0.4, colour = G.C.UI.TEXT_LIGHT } },
+                    {
+                        n = G.UIT.R,
+                        config = { align = "cm" },
+                        nodes = {
+                            { n = G.UIT.T, config = { ref_table = pairing.display, ref_value = "user_code", scale = 0.8, colour = G.C.WHITE } },
+                        },
+                    },
+                    {
+                        n = G.UIT.R,
+                        config = { align = "cm" },
+                        nodes = {
+                            { n = G.UIT.T, config = { ref_table = pairing.display, ref_value = "status_text", scale = 0.4, colour = G.C.UI.TEXT_LIGHT } },
+                        },
+                    },
                 },
             },
         },
