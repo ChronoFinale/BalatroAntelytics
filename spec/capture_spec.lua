@@ -47,6 +47,19 @@ local function make_mock_logger()
     return logger, warnings
 end
 
+--- Recursively copy a table. Used to snapshot G.GAME.pseudorandom before a
+--- capture call so the snapshot can't be affected by later mutation of the
+--- live table it was copied from -- the only way to prove a "read" stayed
+--- a read.
+local function deep_copy(t)
+    if type(t) ~= "table" then return t end
+    local copy = {}
+    for k, v in pairs(t) do
+        copy[k] = deep_copy(v)
+    end
+    return copy
+end
+
 --- Build a realistic mock G global with all expected fields
 local function build_mock_G()
     return {
@@ -735,6 +748,94 @@ describe("Capture module", function()
             G.STATE = G.STATES.PLAY_TAROT
             local state = Capture.build_game_state("use_consumable")
             assert.are.equal("Arcana", state.pack.kind)
+        end)
+    end)
+
+    -- -----------------------------------------------------------------------
+    -- 7b. state.pools -- pseudorandom queue-position snapshot
+    -- -----------------------------------------------------------------------
+    describe("state.pools (pseudorandom queue positions)", function()
+        it("is absent when G.GAME.pseudorandom itself is nil", function()
+            G.GAME.pseudorandom = nil
+            local state = Capture.build_game_state("play_hand")
+            assert.is_nil(state.pools)
+        end)
+
+        it("is absent (not an empty object) when only the seed is present", function()
+            -- The default mock's baseline: no draw has advanced any pool yet.
+            G.GAME.pseudorandom = { seed = "SEED42" }
+            local state = Capture.build_game_state("play_hand")
+            assert.is_nil(state.pools)
+        end)
+
+        it("captures present pool keys and omits keys that never appeared", function()
+            G.GAME.pseudorandom = {
+                seed = "SEED42",
+                Tarot0 = 0.4127,
+                Joker10 = 0.8802,
+            }
+            local state = Capture.build_game_state("play_hand")
+            assert.are.same({ Tarot0 = 0.4127, Joker10 = 0.8802 }, state.pools)
+            -- Never asserts anything about a "Spectral0" key that was never
+            -- in the source table -- absent stays absent, not coerced to 0.
+            assert.is_nil(state.pools.Spectral0)
+        end)
+
+        it("excludes 'seed' and 'hashed_seed' as run metadata, not pool positions", function()
+            G.GAME.pseudorandom = {
+                seed = "SEED42",
+                hashed_seed = 0.5,
+                Voucher0 = 0.271,
+            }
+            local state = Capture.build_game_state("play_hand")
+            assert.are.same({ Voucher0 = 0.271 }, state.pools)
+        end)
+
+        it("skips non-numeric/garbage values instead of coercing them", function()
+            G.GAME.pseudorandom = {
+                seed = "SEED42",
+                Tarot0 = 0.4127,
+                garbage_bool = true,
+                garbage_table = {},
+                garbage_string = "not a float",
+            }
+            local state = Capture.build_game_state("play_hand")
+            assert.are.same({ Tarot0 = 0.4127 }, state.pools)
+        end)
+
+        it("captures modded/unknown keys alongside vanilla ones (blocklist, not allowlist)", function()
+            -- Rule: every key is captured except the two known non-pool
+            -- metadata fields (seed, hashed_seed) -- so a key this capture
+            -- module has never heard of still comes through, because it's
+            -- still a raw pseudorandom() draw counter, just from a mod.
+            G.GAME.pseudorandom = {
+                seed = "SEED42",
+                Tarot0 = 0.4127,
+                mp_custom_mod_pool = 0.9001,
+            }
+            local state = Capture.build_game_state("play_hand")
+            assert.are.same({ Tarot0 = 0.4127, mp_custom_mod_pool = 0.9001 }, state.pools)
+        end)
+
+        it("does NOT mutate G.GAME.pseudorandom -- a read must stay a read", function()
+            -- This is the dangerous mistake: calling pseudoseed(key) (or
+            -- anything that does) instead of a plain table index would
+            -- advance the very RNG chain being reported and desync the
+            -- player's run. Deep-compare the whole table before/after.
+            G.GAME.pseudorandom = {
+                seed = "SEED42",
+                hashed_seed = 0.1234567890123,
+                Tarot0 = 0.4127,
+                Joker10 = 0.8802,
+                Joker20 = 0.1,
+                Spectral_pack0 = 0.55,
+                Voucher0 = 0.271,
+            }
+            local before = deep_copy(G.GAME.pseudorandom)
+
+            Capture.build_game_state("play_hand")
+
+            assert.are.same(before, G.GAME.pseudorandom)
         end)
     end)
 

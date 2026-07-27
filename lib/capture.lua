@@ -777,6 +777,70 @@ local function build_hand_levels(hands_table)
     return levels
 end
 
+-- ---------------------------------------------------------------------------
+-- Pseudorandom pool keys treated as run metadata rather than a draw-pool
+-- position -- never surfaced under state.pools. `seed` is the run seed
+-- string (not a number, and not a draw counter). `hashed_seed` is a
+-- seed-derived constant that every other key's value is blended with at
+-- read time (misc_functions.lua pseudoseed(), :312) but is itself never
+-- advanced by a draw -- reporting it as a "pool position" would be noise.
+-- ---------------------------------------------------------------------------
+local POOL_METADATA_KEYS = { seed = true, hashed_seed = true }
+
+--- Build the queue-position snapshot for state.pools.
+---
+--- Balatro tracks how deep a run is into a pseudorandom draw pool as one
+--- float per key in G.GAME.pseudorandom, advanced IN PLACE by
+--- `pseudoseed(key)` (misc_functions.lua:298-313) every time a card/voucher/
+--- tag draw consumes that pool (common_events.lua create_card, :2113-2118).
+--- This function is a PLAIN TABLE READ of the current values -- it must
+--- never call pseudoseed() itself, which would advance (and desync) the
+--- very queues it's reporting.
+---
+--- Key selection is a BLOCKLIST, not a fixed allowlist of pool names: every
+--- key present is captured except the two known non-pool metadata entries
+--- (POOL_METADATA_KEYS). The literal key strings Balatro/the Multiplayer
+--- mod's "The Order" use vary by context -- solo play suffixes an ante
+--- number per draw type, The Order overrides that suffix to unify a queue
+--- across the whole run, and other mods can add their own keys entirely --
+--- so naming a small fixed set up front would silently go blind the moment
+--- the real key didn't match. Capturing "everything but the two known
+--- non-pool fields" reports the ground truth regardless of naming, and
+--- modded/unrecognized keys are captured right along with vanilla ones
+--- (never specially ignored).
+---
+--- @param pseudorandom_table table|nil  G.GAME.pseudorandom, or nil/absent.
+--- @return table|nil  Map of pool key -> raw pseudorandom float, or nil when
+---                     the source table is absent or yields no qualifying
+---                     keys (never an empty table -- both collapse to
+---                     "omit the field": absent and empty are different
+---                     facts, but neither has anything truthful to report).
+--- SECURITY: these raw values MUST NOT be published on any public wire.
+--- `pseudoseed` advances a key's stored state as a pure function of the
+--- PREVIOUS value alone (Balatro/functions/misc_functions.lua:311 --
+--- `abs((2.134453429141 + prev*1.72431234) % 1)`); hashed_seed is mixed only
+--- into the RETURNED value, never into the state transition. So one published
+--- value lets anyone compute that pool's entire future sequence, with no seed
+--- required. That is the same class of leak as state.seed and run_id.
+---
+--- Capturing them locally is fine (it is the player's own run file). Anything
+--- viewer-facing must publish a DERIVED, non-invertible summary -- e.g. "N
+--- pulls deep" -- never the value itself. The server-side wire allowlist
+--- deliberately does not include `pools`; do not add it.
+local function build_pseudorandom_pools(pseudorandom_table)
+    if type(pseudorandom_table) ~= "table" then
+        return nil
+    end
+    local pools = nil
+    for key, value in pairs(pseudorandom_table) do
+        if type(key) == "string" and not POOL_METADATA_KEYS[key] and type(value) == "number" then
+            pools = pools or {}
+            pools[key] = value
+        end
+    end
+    return pools
+end
+
 --- Build the shop inventory list.
 --- Reads from G.shop_jokers, G.shop_vouchers, G.shop_booster, G.shop_tarot.
 ---
@@ -1104,6 +1168,16 @@ function Capture.build_game_state(action_type)
     local pack_ok, pack_kind = pcall(get_current_pack_kind)
     if pack_ok and type(pack_kind) == "string" then
         state.pack = { kind = pack_kind }
+    end
+
+    -- Pseudorandom pool positions ("queue depth") -- how deep the run is
+    -- into each of Balatro's per-key RNG draw chains. Build rule: see
+    -- build_pseudorandom_pools above. Omitted entirely (not an empty
+    -- object) when there's nothing to report, matching the pack overlay's
+    -- absent-when-not-applicable convention just above.
+    local pools_ok, pools = pcall(function() return build_pseudorandom_pools(G.GAME.pseudorandom) end)
+    if pools_ok and type(pools) == "table" then
+        state.pools = pools
     end
 
     -- PvP state (Requirements 4.2, 4.3, 4.4)
