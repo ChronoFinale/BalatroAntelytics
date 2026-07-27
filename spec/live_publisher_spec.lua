@@ -34,6 +34,35 @@ local function make_publisher(overrides)
     return publisher, calls
 end
 
+--- A fake sender that records every call AND captures the `on_response`
+--- callback so a test can simulate the async completion manually — mirrors
+--- how SMODS.https.asyncRequest completes on a later frame, not inline.
+local function make_responsive_fake_sender()
+    local calls = {}
+    local sender = function(url, token, payload, on_response)
+        calls[#calls + 1] = { url = url, token = token, payload = payload, on_response = on_response }
+    end
+    return sender, calls
+end
+
+local function make_responsive_publisher(overrides)
+    overrides = overrides or {}
+    local sender, calls = make_responsive_fake_sender()
+    local logged = {}
+    local publisher = LivePublisher.new({
+        config = overrides.config or {
+            live_enabled = true,
+            live_url     = "https://www.antelytics.gg",
+            live_token   = string.rep("t", 32),
+        },
+        sender      = overrides.sender or sender,
+        clock       = overrides.clock or function() return 1234 end,
+        logger      = overrides.logger or function(msg) logged[#logged + 1] = msg end,
+        mod_version = overrides.mod_version or "1.2.2~alpha",
+    })
+    return publisher, calls, logged
+end
+
 describe("LivePublisher — pure core", function()
 
     describe("should_publish", function()
@@ -95,6 +124,56 @@ describe("LivePublisher — pure core", function()
                 mod_version = "1.2.2~alpha",
                 sent_at     = 1000,
             }, payload)
+        end)
+    end)
+
+    describe("classify_response", function()
+        it("401 and 403 are auth_failure — permanent, retrying will never succeed", function()
+            assert.are.equal("auth_failure", LivePublisher.classify_response(401))
+            assert.are.equal("auth_failure", LivePublisher.classify_response(403))
+        end)
+
+        it("everything else (success, other 4xx, 5xx, or nil for no response at all) is ok", function()
+            assert.are.equal("ok", LivePublisher.classify_response(200))
+            assert.are.equal("ok", LivePublisher.classify_response(400))
+            assert.are.equal("ok", LivePublisher.classify_response(404))
+            assert.are.equal("ok", LivePublisher.classify_response(429))
+            assert.are.equal("ok", LivePublisher.classify_response(500))
+            assert.are.equal("ok", LivePublisher.classify_response(503))
+            assert.are.equal("ok", LivePublisher.classify_response(nil)) -- timeout / no response
+        end)
+    end)
+
+    describe("next_auth_state", function()
+        it("401 halts, with the exact unauthorized message", function()
+            local halt, message = LivePublisher.next_auth_state(401)
+            assert.is_true(halt)
+            assert.are.equal("Publishing unauthorized — relink your account", message)
+            assert.are.equal(LivePublisher.UNAUTHORIZED_MESSAGE, message)
+        end)
+
+        it("403 halts the same way", function()
+            local halt, message = LivePublisher.next_auth_state(403)
+            assert.is_true(halt)
+            assert.are.equal(LivePublisher.UNAUTHORIZED_MESSAGE, message)
+        end)
+
+        it("500 does not halt: no message, fire-and-forget continues", function()
+            local halt, message = LivePublisher.next_auth_state(500)
+            assert.is_false(halt)
+            assert.are.equal("", message)
+        end)
+
+        it("nil (timeout / no response at all) does not halt", function()
+            local halt, message = LivePublisher.next_auth_state(nil)
+            assert.is_false(halt)
+            assert.are.equal("", message)
+        end)
+
+        it("a success (200) does not halt", function()
+            local halt, message = LivePublisher.next_auth_state(200)
+            assert.is_false(halt)
+            assert.are.equal("", message)
         end)
     end)
 
@@ -183,6 +262,122 @@ describe("LivePublisher — publish (shell, with injected sender/clock)", functi
         publisher:publish("RUN1", { index = 0 })
         assert.are.equal(9999, calls[1].payload.sent_at)
         assert.are.equal(1, calls_seen)
+    end)
+
+end)
+
+describe("LivePublisher — auth-failure halt (shell, injected sender/clock)", function()
+
+    it("a fresh publisher starts unhalted with an empty, string status_text", function()
+        local publisher = make_responsive_publisher()
+        assert.is_false(publisher.halted)
+        assert.are.equal("string", type(publisher.display.status_text))
+        assert.are.equal("", publisher.display.status_text)
+    end)
+
+    it("401 flips to the unauthorized state and halts sending: no further node reaches the sender", function()
+        local publisher, calls = make_responsive_publisher()
+
+        publisher:publish("RUN1", { index = 0 })
+        assert.are.equal(1, #calls)
+        calls[1].on_response(401)
+
+        assert.is_true(publisher.halted)
+        assert.are.equal("string", type(publisher.display.status_text))
+        assert.are.equal(LivePublisher.UNAUTHORIZED_MESSAGE, publisher.display.status_text)
+
+        publisher:publish("RUN1", { index = 1 })
+        assert.are.equal(1, #calls) -- still 1: halted, sender never called again
+    end)
+
+    it("403 halts sending the same way", function()
+        local publisher, calls = make_responsive_publisher()
+
+        publisher:publish("RUN1", { index = 0 })
+        calls[1].on_response(403)
+
+        assert.is_true(publisher.halted)
+        assert.are.equal(LivePublisher.UNAUTHORIZED_MESSAGE, publisher.display.status_text)
+
+        publisher:publish("RUN1", { index = 1 })
+        assert.are.equal(1, #calls)
+    end)
+
+    it("500 does NOT halt: still fire-and-forget, the next node still sends", function()
+        local publisher, calls = make_responsive_publisher()
+
+        publisher:publish("RUN1", { index = 0 })
+        calls[1].on_response(500)
+
+        assert.is_false(publisher.halted)
+        assert.are.equal("", publisher.display.status_text)
+
+        publisher:publish("RUN1", { index = 1 })
+        assert.are.equal(2, #calls)
+    end)
+
+    it("a timeout / no response at all (on_response(nil)) does NOT halt", function()
+        local publisher, calls = make_responsive_publisher()
+
+        publisher:publish("RUN1", { index = 0 })
+        calls[1].on_response(nil)
+
+        assert.is_false(publisher.halted)
+        assert.are.equal("", publisher.display.status_text)
+
+        publisher:publish("RUN1", { index = 1 })
+        assert.are.equal(2, #calls)
+    end)
+
+    it("a success after a transient failure keeps publishing", function()
+        local publisher, calls = make_responsive_publisher()
+
+        publisher:publish("RUN1", { index = 0 })
+        calls[1].on_response(500) -- transient failure
+
+        publisher:publish("RUN1", { index = 1 })
+        calls[2].on_response(200) -- success
+
+        publisher:publish("RUN1", { index = 2 })
+
+        assert.are.equal(3, #calls)
+        assert.is_false(publisher.halted)
+    end)
+
+    it("reset_auth_state clears a halt and sending resumes", function()
+        local publisher, calls = make_responsive_publisher()
+
+        publisher:publish("RUN1", { index = 0 })
+        calls[1].on_response(401)
+        assert.is_true(publisher.halted)
+
+        publisher:reset_auth_state()
+
+        assert.is_false(publisher.halted)
+        assert.are.equal("string", type(publisher.display.status_text))
+        assert.are.equal("", publisher.display.status_text)
+
+        publisher:publish("RUN1", { index = 1 })
+        assert.are.equal(2, #calls)
+    end)
+
+    it("reset_auth_state is a safe no-op when not halted", function()
+        local publisher = make_responsive_publisher()
+        assert.has_no.errors(function() publisher:reset_auth_state() end)
+        assert.is_false(publisher.halted)
+        assert.are.equal("", publisher.display.status_text)
+    end)
+
+    it("display table identity never changes across halt/reset — required for the UI's captured ref_table binding (see lib/pairing_ui.lua)", function()
+        local publisher, calls = make_responsive_publisher()
+        local display_ref = publisher.display
+
+        publisher:publish("RUN1", { index = 0 })
+        calls[1].on_response(401)
+        assert.are.equal(display_ref, publisher.display)
+
+        publisher:reset_auth_state()
+        assert.are.equal(display_ref, publisher.display)
     end)
 
 end)

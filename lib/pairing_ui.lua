@@ -14,9 +14,17 @@
 --- ref_table every frame and recalculates the text when its string length
 --- changes (see lib/pairing.lua's docs on `display`).
 ---
+--- The same live-updating-text trick covers "Antelytics Live" auth-failure
+--- visibility: a permanently-present row is bound to
+--- `live_publisher.display.status_text` (empty string while sending is
+--- healthy, "Publishing unauthorized — relink your account" once a 401/403
+--- halts it — see lib/live_publisher.lua). It must stay unconditionally in
+--- the node tree (never added/removed based on halted-or-not) for the same
+--- reason: there is no way to change the structure of an already-open tab.
+---
 --- Public API:
----   PairingUI.register_funcs(pairing)          -- wires G.FUNCS.antelytics_*
----   PairingUI.make_config_tab(pairing, config)  -- returns a config_tab function
+---   PairingUI.register_funcs(pairing)                          -- wires G.FUNCS.antelytics_*
+---   PairingUI.make_config_tab(pairing, config, live_publisher)  -- returns a config_tab function
 
 local PairingUI = {}
 
@@ -32,6 +40,20 @@ function PairingUI.register_funcs(pairing)
     G.FUNCS.antelytics_unlink = function(_e)
         pairing:unlink()
     end
+end
+
+--- Always-present row for the "Antelytics Live" publish auth status
+--- (empty/blank while healthy — see module docs above on why this can't be
+--- conditionally added/removed).
+--- @param display table  a live_publisher.display table (has status_text)
+local function publish_status_row(display)
+    return {
+        n = G.UIT.R,
+        config = { align = "cm", padding = 0.05 },
+        nodes = {
+            { n = G.UIT.T, config = { ref_table = display, ref_value = "status_text", scale = 0.35, colour = G.C.RED } },
+        },
+    }
 end
 
 local function title_row(text)
@@ -86,10 +108,30 @@ end
 --- Build the config_tab function. Reads `pairing`/`config` fresh every time
 --- it's called (see module docs above) — never called directly by this
 --- file, only handed to `mod.config_tab`.
---- @param pairing table  a lib.pairing Pairing instance
---- @param config  table  the mod.config table (reads linked_user/live_enabled)
+--- @param pairing table         a lib.pairing Pairing instance
+--- @param config  table         the mod.config table (reads linked_user/live_enabled)
+--- @param live_publisher table|nil  a lib.live_publisher LivePublisher instance;
+---                                   its auth-halt status is shown and its halt
+---                                   is cleared when the player retoggles
+---                                   "Live publishing". Optional so callers
+---                                   that don't wire live publishing at all
+---                                   still get a working tab.
 --- @return fun(): table  a Steamodded config_tab function
-function PairingUI.make_config_tab(pairing, config)
+function PairingUI.make_config_tab(pairing, config, live_publisher)
+    local publish_display = (live_publisher and live_publisher.display) or { status_text = "" }
+
+    --- Toggling "Live publishing" off/on is one of the two player-driven
+    --- ways to resume sending after an auth-failure halt (the other is
+    --- relinking — see lib/pairing.lua's on_relink). Fires on every toggle
+    --- click, not just off->on: harmless when already clear, and simpler
+    --- than tracking the previous value to detect the on-edge specifically.
+    local function on_publishing_toggle()
+        pairing.save_config()
+        if live_publisher then
+            live_publisher:reset_auth_state()
+        end
+    end
+
     return function()
         local link_nodes
 
@@ -142,10 +184,11 @@ function PairingUI.make_config_tab(pairing, config)
                             label     = "Live publishing",
                             ref_table = config,
                             ref_value = "live_enabled",
-                            callback  = pairing.save_config,
+                            callback  = on_publishing_toggle,
                         }),
                     },
                 },
+                publish_status_row(publish_display),
                 { n = G.UIT.R, config = { minh = 0.1 } },
                 {
                     n = G.UIT.R,

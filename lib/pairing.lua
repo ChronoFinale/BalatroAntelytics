@@ -23,7 +23,7 @@
 ---   Pairing.should_poll(state, now)                    -> boolean
 ---
 --- Shell (effects at the edge, mirrors lib/live_publisher.lua):
----   Pairing.new(deps)   -- deps = { config, sender, clock, logger, save_config, open_url }
+---   Pairing.new(deps)   -- deps = { config, sender, clock, logger, save_config, open_url, on_relink }
 ---   pairing:start_link()   -- kicks off /pair/start, opens the approval page
 ---   pairing:tick(now)      -- call every frame (e.g. from love.update); polls
 ---                             /pair/poll only when a pairing is actually in
@@ -324,6 +324,13 @@ end
 ---   logger       fn(msg)                   -- default: no-op
 ---   save_config  fn()                      -- default: SMODS.save_mod_config
 ---   open_url     fn(url)                   -- default: love.system.openURL
+---   on_relink    fn()                      -- default: no-op. Called once a
+---                                              NEW stream_key has just been
+---                                              written (a successful
+---                                              approval), so a collaborator
+---                                              like LivePublisher can clear
+---                                              any "unauthorized" halt on
+---                                              the old, now-replaced token.
 --- }
 function Pairing.new(deps)
     deps = deps or {}
@@ -335,6 +342,7 @@ function Pairing.new(deps)
         logger         = deps.logger or function() end,
         save_config    = deps.save_config or default_save_config,
         open_url       = deps.open_url or default_open_url,
+        on_relink      = deps.on_relink or function() end,
         state          = { status = "idle" },
         poll_in_flight = false,
         display        = {
@@ -448,11 +456,26 @@ function Pairing:_handle_poll_response(ok, http_status, body)
         self.display.linked_user = new_state.linked_user
         self.display.user_code   = ""
 
+        -- Approving pairing IS the request to publish -- a player who has just
+        -- completed the whole link flow and then sees nothing happen has hit a
+        -- dead end for no reason. The toggle stays so publishing can be paused
+        -- later; it just starts on rather than off.
+        self.config.live_enabled = true
+
         local save_ok, save_err = pcall(self.save_config)
         if not save_ok then
             self.logger("Pairing: failed to save config after approval: " .. tostring(save_err))
         else
             self.logger("Pairing: linked as " .. tostring(new_state.linked_user))
+        end
+
+        -- A new token was just written -- any prior "unauthorized" halt was
+        -- about the OLD (now-replaced) token and no longer applies. Fires
+        -- regardless of save_ok: self.config already holds the new token in
+        -- memory, so a retried send would use it either way.
+        local relink_ok, relink_err = pcall(self.on_relink)
+        if not relink_ok then
+            self.logger("Pairing: on_relink callback failed: " .. tostring(relink_err))
         end
     end
 end

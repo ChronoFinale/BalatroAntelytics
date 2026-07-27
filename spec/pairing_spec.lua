@@ -272,6 +272,7 @@ local function make_pairing(overrides)
         linked_user  = "",
     }
     local now = overrides.now or 1000
+    local relinks = 0
     local pairing = Pairing.new({
         config      = config,
         sender      = overrides.sender or sender,
@@ -279,10 +280,12 @@ local function make_pairing(overrides)
         logger      = overrides.logger or function(msg) logged[#logged + 1] = msg end,
         save_config = overrides.save_config or function() saves = saves + 1 end,
         open_url    = overrides.open_url or function(url) opened[#opened + 1] = url end,
+        on_relink   = overrides.on_relink or function() relinks = relinks + 1 end,
     })
     return pairing, {
         calls    = calls,
         saves    = function() return saves end,
+        relinks  = function() return relinks end,
         logged   = logged,
         opened   = opened,
     }
@@ -348,12 +351,77 @@ describe("Pairing — shell (injected fakes)", function()
         assert.are.equal("sk_live_abc", pairing.config.live_token)
         assert.are.equal("chrono", pairing.config.linked_user)
         assert.are.equal(1, spy.saves())
+        assert.are.equal(1, spy.relinks())
         assert.are.equal("approved", pairing.state.status)
         assert.are.equal("Linked as chrono", pairing.display.status_text)
 
         -- Approved: no further polling.
         pairing:tick(2000)
         assert.are.equal(2, #spy.calls)
+    end)
+
+    it("on_relink is NOT called for denied or expired outcomes — only a genuine new token warrants clearing a halt", function()
+        local pairing, spy = make_pairing({ now = 1000 })
+        pairing:start_link()
+        spy.calls[1].callback(true, 200, {
+            user_code = "U", device_code = "dev-1", expires_in = 600, interval = 5,
+        })
+
+        pairing:tick(1005)
+        spy.calls[2].callback(true, 200, { status = "denied" })
+
+        assert.are.equal("denied", pairing.state.status)
+        assert.are.equal(0, spy.relinks())
+    end)
+
+    it("on_relink is NOT called while a pairing is merely pending (no approval yet)", function()
+        local pairing, spy = make_pairing({ now = 1000 })
+        pairing:start_link()
+        spy.calls[1].callback(true, 200, {
+            user_code = "U", device_code = "dev-1", expires_in = 600, interval = 5,
+        })
+
+        pairing:tick(1005)
+        spy.calls[2].callback(true, 200, { status = "pending" })
+
+        assert.are.equal("pending", pairing.state.status)
+        assert.are.equal(0, spy.relinks())
+    end)
+
+    it("on_relink defaults to a safe no-op when not provided", function()
+        local pairing = Pairing.new({
+            config      = { live_url = "https://www.antelytics.gg" },
+            sender      = function(_path, _body, callback) callback(true, 200, { status = "approved", stream_key = "sk_live_x", linked_user = "chrono" }) end,
+            clock       = function() return 1000 end,
+            logger      = function() end,
+            save_config = function() end,
+        })
+        pairing.state = { status = "pending", device_code = "dev-1", interval = 5, poll_again_at = 1000, expires_at = 2000 }
+
+        assert.has_no.errors(function()
+            pairing:tick(1000)
+        end)
+        assert.are.equal("sk_live_x", pairing.config.live_token)
+    end)
+
+    it("an on_relink callback that throws is caught and does not propagate", function()
+        local logged = {}
+        local pairing = Pairing.new({
+            config      = { live_url = "https://www.antelytics.gg" },
+            sender      = function(_path, _body, callback) callback(true, 200, { status = "approved", stream_key = "sk_live_x", linked_user = "chrono" }) end,
+            clock       = function() return 1000 end,
+            logger      = function(msg) logged[#logged + 1] = msg end,
+            save_config = function() end,
+            on_relink   = function() error("live_publisher blew up") end,
+        })
+        pairing.state = { status = "pending", device_code = "dev-1", interval = 5, poll_again_at = 1000, expires_at = 2000 }
+
+        assert.has_no.errors(function()
+            pairing:tick(1000)
+        end)
+        -- Approval itself still succeeded despite on_relink failing.
+        assert.are.equal("sk_live_x", pairing.config.live_token)
+        assert.is_true(#logged > 0)
     end)
 
     it("a sender error during tick() is caught and does not propagate", function()
@@ -418,4 +486,46 @@ describe("Pairing — shell (injected fakes)", function()
         assert.are.equal(0, revoke_calls)
     end)
 
+end)
+
+describe("pairing enables publishing on approval", function()
+    -- Regression: a player who completes the entire link flow and then sees
+    -- nothing happen has hit a dead end. Approval is the request to publish.
+    it("sets live_enabled when a stream key is written", function()
+        local config = { live_url = "https://example.test", live_enabled = false }
+        local saved = 0
+        local p = Pairing.new({
+            config = config,
+            clock = function() return 1000 end,
+            save_config = function() saved = saved + 1 end,
+            sender = function() end,
+        })
+        p.state = {
+            status = "pending", device_code = "d", user_code = "U",
+            interval = 5, expires_at = 9999, poll_again_at = 0,
+        }
+
+        p:_handle_poll_response(true, 200, { status = "approved", stream_key = "k", linked_user = "Chrono" })
+
+        assert.are.equal("k", config.live_token)
+        assert.is_true(config.live_enabled)
+        assert.is_true(saved >= 1)
+    end)
+
+    it("does not re-enable publishing that the player turned off after linking", function()
+        -- unlink() clears the link; it must not also flip a manual preference
+        -- back on behind the player's back.
+        local config = { live_url = "https://example.test", live_enabled = false, live_token = "k", linked_user = "Chrono" }
+        local p = Pairing.new({
+            config = config,
+            clock = function() return 1000 end,
+            save_config = function() end,
+            sender = function() end,
+        })
+
+        p:unlink()
+
+        assert.are.equal("", config.live_token)
+        assert.is_false(config.live_enabled)
+    end)
 end)

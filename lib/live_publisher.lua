@@ -4,17 +4,30 @@
 --- Opt-in via config (live_enabled + live_url + live_token). When any of
 --- those are missing, publish() is a no-op — no network call is attempted
 --- and no cost is paid. When configured, each node is POSTed to
---- `<live_url>/api/live/node` as it happens. Responses are ignored;
---- failures are logged and dropped, never retried, never surfaced to the
---- player.
+--- `<live_url>/api/live/node` as it happens.
+---
+--- Responses are mostly ignored (fire-and-forget by design — a run must
+--- never be blocked or crashed by networking), EXCEPT for one permanent,
+--- actionable case: HTTP 401/403 means the configured stream key is
+--- revoked/invalid/unknown. That will never succeed by retrying, so it
+--- halts sending (no further node reaches the network) and records a
+--- string in `display.status_text` the Config tab binds to via
+--- `ref_table`, mirroring lib/pairing.lua's `pairing.display` pattern.
+--- Every other outcome (5xx, timeout, no response at all) is transient:
+--- logged and dropped, never retried, never surfaced to the player. Sending
+--- resumes only on an explicit `reset_auth_state()` (relinking, or toggling
+--- "Live publishing" off/on) — see lib/pairing_ui.lua.
 ---
 --- Pure core (no I/O, no globals, no clock/network):
 ---   LivePublisher.should_publish(cfg)                               -> boolean
 ---   LivePublisher.build_payload(run_id, node, mod_version, sent_at)  -> table
+---   LivePublisher.classify_response(http_status)                    -> "auth_failure"|"ok"
+---   LivePublisher.next_auth_state(http_status)                      -> halt, message
 ---
 --- Shell (effects at the edge):
 ---   LivePublisher.new(deps)      -- deps = { config, sender, clock, logger, mod_version }
 ---   publisher:publish(run_id, node)
+---   publisher:reset_auth_state()
 ---
 --- The sender and clock are injected so tests substitute fakes and assert
 --- on the exact payload that WOULD be sent; production wires the real
@@ -23,8 +36,11 @@
 --- Public API:
 ---   LivePublisher.should_publish(cfg)
 ---   LivePublisher.build_payload(run_id, node, mod_version, sent_at)
+---   LivePublisher.classify_response(http_status)
+---   LivePublisher.next_auth_state(http_status)
 ---   LivePublisher.new(deps)
 ---   publisher:publish(run_id, node)
+---   publisher:reset_auth_state()
 
 local LivePublisher = {}
 LivePublisher.__index = LivePublisher
@@ -60,6 +76,39 @@ function LivePublisher.build_payload(run_id, node, mod_version, sent_at)
         mod_version = mod_version,
         sent_at     = sent_at,
     }
+end
+
+--- User-facing message shown in the Config tab while sending is halted.
+LivePublisher.UNAUTHORIZED_MESSAGE = "Publishing unauthorized — relink your account"
+
+--- Classify a completed send by its HTTP status. Pure — no I/O, decides
+--- purely from the status code. 401/403 mean the configured stream key is
+--- permanently invalid (revoked, unknown, or malformed) and retrying will
+--- never succeed. Everything else — 2xx, any other 4xx, 5xx, or nil (a
+--- transport-level failure: timeout / no response at all) — is transient:
+--- Antelytics Live is fire-and-forget by design and must not halt for it.
+--- @param http_status number|nil
+--- @return "auth_failure"|"ok"
+function LivePublisher.classify_response(http_status)
+    if http_status == 401 or http_status == 403 then
+        return "auth_failure"
+    end
+    return "ok"
+end
+
+--- Decide what publishing should do next given one completed send's HTTP
+--- status. Pure. Only an auth failure halts sending; a transient failure
+--- (or a success) leaves sending exactly as it was — the shell never calls
+--- this again once halted (see publish()/reset_auth_state()), so it does
+--- not need the prior state to answer "should THIS response halt sending".
+--- @param http_status number|nil
+--- @return boolean halt     true = stop sending until an explicit reset
+--- @return string  message  "" when not halting, else the UI-facing string
+function LivePublisher.next_auth_state(http_status)
+    if LivePublisher.classify_response(http_status) == "auth_failure" then
+        return true, LivePublisher.UNAUTHORIZED_MESSAGE
+    end
+    return false, ""
 end
 
 -- ---------------------------------------------------------------------------
@@ -106,11 +155,14 @@ end
 
 --- Real production sender: POSTs the JSON-encoded payload via SMODS's async
 --- HTTPS client (a thread per request, polled off the game thread — see
---- smods-https.lua). The response is intentionally ignored (fire-and-forget).
+--- smods-https.lua). The response body is ignored (fire-and-forget), but the
+--- HTTP status is forwarded to `on_response` so the shell can detect a
+--- permanent auth failure — see LivePublisher.classify_response.
 --- @param url string    base live_url, e.g. "https://www.antelytics.gg"
 --- @param token string  bearer token
 --- @param payload table the wire payload (see build_payload)
-local function default_sender(url, token, payload)
+--- @param on_response fun(http_status: number|nil)
+local function default_sender(url, token, payload, on_response)
     -- SMODS registers its HTTPS client as a module named "SMODS.https", not as
     -- a field on the SMODS global — see lib/http_client.lua. Publishing failed
     -- silently on every node before this was corrected.
@@ -124,8 +176,10 @@ local function default_sender(url, token, payload)
             ["Content-Type"]  = "application/json",
         },
         data = body,
-    }, function(_code, _body, _headers)
-        -- Fire-and-forget: response is intentionally ignored, success or not.
+    }, function(code, _body, _headers)
+        -- Body/headers are intentionally ignored; only the status code feeds
+        -- the auth-failure decision (see LivePublisher:publish).
+        on_response(code)
     end)
 end
 
@@ -133,7 +187,7 @@ end
 ---   config       table   live_enabled/live_url/live_token. Pass the actual
 ---                         mod.config table (by reference) so runtime
 ---                         toggles apply without re-wiring.
----   sender       fn(url, token, payload_table)  -- default: SMODS.https POST
+---   sender       fn(url, token, payload_table, on_response)  -- default: SMODS.https POST
 ---   clock        fn() -> number                 -- default: os.time
 ---   logger       fn(msg)                        -- default: no-op
 ---   mod_version  string                         -- default: "unknown"
@@ -146,25 +200,66 @@ function LivePublisher.new(deps)
         clock       = deps.clock or os.time,
         logger      = deps.logger or function() end,
         mod_version = deps.mod_version or "unknown",
+        -- True once a 401/403 has been seen for the currently-configured
+        -- token: publish() stops sending entirely until reset_auth_state().
+        halted      = false,
+        -- Plain STRING fields meant to be bound directly into a UI text
+        -- node's `config.ref_table` (see lib/pairing.lua's `display` for the
+        -- same pattern). Never nil, so the very first bind doesn't choke.
+        display     = { status_text = "" },
     }, LivePublisher)
 end
 
---- Publish one node if (and only if) live publishing is enabled and
---- configured. Never raises — sender errors are caught and logged, the
---- node is dropped, the run continues unaffected.
+--- Publish one node if (and only if) live publishing is enabled, configured,
+--- and not halted by a prior auth failure. Never raises — sender errors are
+--- caught and logged, the node is dropped, the run continues unaffected.
 --- @param run_id string
 --- @param node table
 function LivePublisher:publish(run_id, node)
+    if self.halted then
+        return
+    end
     if not LivePublisher.should_publish(self.config) then
         return
     end
 
     local payload = LivePublisher.build_payload(run_id, node, self.mod_version, self.clock())
 
-    local ok, err = pcall(self.sender, self.config.live_url, self.config.live_token, payload)
+    local ok, err = pcall(self.sender, self.config.live_url, self.config.live_token, payload, function(http_status)
+        local completion_ok, cerr = pcall(function()
+            self:_handle_send_response(http_status)
+        end)
+        if not completion_ok then
+            self.logger("LivePublisher: response handling failed: " .. tostring(cerr))
+        end
+    end)
     if not ok then
         self.logger("LivePublisher: send failed for node " .. tostring(node and node.index) .. ": " .. tostring(err))
     end
+end
+
+--- Apply the pure auth-failure decision for one completed send. Only ever
+--- transitions "not halted" -> "halted" — a later response can't un-halt
+--- (publish() stops calling the sender at all once halted, so this is only
+--- ever reached again after an explicit reset_auth_state()).
+--- @param http_status number|nil
+function LivePublisher:_handle_send_response(http_status)
+    local halt, message = LivePublisher.next_auth_state(http_status)
+    if halt then
+        self.halted = true
+        self.display.status_text = message
+        self.logger("LivePublisher: " .. message)
+    end
+end
+
+--- Clear a halted auth-failure state so publishing resumes. Called by the
+--- shell on user-taken corrective action: relinking (a new stream key is
+--- saved — see lib/pairing.lua's `on_relink`) or toggling "Live publishing"
+--- off/on (see lib/pairing_ui.lua). Safe to call unconditionally — a no-op
+--- when not halted.
+function LivePublisher:reset_auth_state()
+    self.halted = false
+    self.display.status_text = ""
 end
 
 return LivePublisher

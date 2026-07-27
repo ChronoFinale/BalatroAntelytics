@@ -154,9 +154,13 @@ local pairing = Pairing.new({
     -- press (runtime) fails. Passing them in removes that failure mode entirely.
     http_client = HttpClient,
     serializer  = Serializer,
+    -- A successful relink just wrote a brand-new stream_key: any earlier
+    -- "unauthorized" halt on live_publisher was about the OLD token, so
+    -- clear it and let sending resume with the new one.
+    on_relink = function() live_publisher:reset_auth_state() end,
 })
 PairingUI.register_funcs(pairing)
-mod.config_tab = PairingUI.make_config_tab(pairing, config)
+mod.config_tab = PairingUI.make_config_tab(pairing, config, live_publisher)
 
 local recorder = Recorder.new({
     file_writer    = file_writer,
