@@ -66,6 +66,44 @@ end
 -- Shell — default sender (SMODS.https), overridable for tests
 -- ---------------------------------------------------------------------------
 
+--- Load one of this mod's own files.
+---
+--- In Balatro, SMODS loads mod files with `SMODS.load_file`; plain `require`
+--- does NOT resolve them (the mod's directory is not on package.path). Under
+--- busted there is no SMODS and `require` is what works. Both loads below sat
+--- on the `require` path only, so publishing would have failed on every node
+--- the first time it was reached -- silently, since the send path is
+--- pcall-wrapped and fire-and-forget by design.
+--- @param path string     SMODS path, e.g. "lib/serializer.lua"
+--- @param modname string  require name, e.g. "lib.serializer"
+local sibling_cache = {}
+local function load_sibling(path, modname)
+    local cached = sibling_cache[modname]
+    if cached ~= nil then return cached end
+
+    local smods = rawget(_G, "SMODS")
+    if smods and smods.load_file then
+        -- The mod id is REQUIRED here. SMODS.load_file(path) without an id only
+        -- works while the mod is first loading (it reads SMODS.current_mod);
+        -- at runtime -- e.g. a button press -- current_mod is nil and it errors
+        -- with "No ID was provided!". See smods/src/preflight/loader.lua:870-873.
+        local ok, chunk = pcall(smods.load_file, path, "Antelytics")
+        if ok and type(chunk) == "function" then
+            local loaded = chunk()
+            sibling_cache[modname] = loaded
+            return loaded
+        end
+    end
+
+    local ok2, loaded2 = pcall(require, modname)
+    if ok2 then
+        sibling_cache[modname] = loaded2
+        return loaded2
+    end
+
+    error("could not load " .. path .. " (tried SMODS.load_file and require)")
+end
+
 --- Real production sender: POSTs the JSON-encoded payload via SMODS's async
 --- HTTPS client (a thread per request, polled off the game thread — see
 --- smods-https.lua). The response is intentionally ignored (fire-and-forget).
@@ -73,13 +111,13 @@ end
 --- @param token string  bearer token
 --- @param payload table the wire payload (see build_payload)
 local function default_sender(url, token, payload)
-    local smods = rawget(_G, "SMODS")
-    if not smods or not smods.https or not smods.https.asyncRequest then
-        error("SMODS.https.asyncRequest is not available")
-    end
-    local Serializer = require("lib.serializer")
+    -- SMODS registers its HTTPS client as a module named "SMODS.https", not as
+    -- a field on the SMODS global — see lib/http_client.lua. Publishing failed
+    -- silently on every node before this was corrected.
+    local client = load_sibling("lib/http_client.lua", "lib.http_client").require_client()
+    local Serializer = load_sibling("lib/serializer.lua", "lib.serializer")
     local body = Serializer.encode(payload)
-    smods.https.asyncRequest(url .. "/api/live/node", {
+    client.asyncRequest(url .. "/api/live/node", {
         method = "POST",
         headers = {
             ["Authorization"] = "Bearer " .. tostring(token),

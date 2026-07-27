@@ -38,6 +38,7 @@ local Capture     = assert(SMODS.load_file("lib/capture.lua"))()
 local hooks       = assert(SMODS.load_file("lib/hooks.lua"))()
 local Multiplayer = assert(SMODS.load_file("lib/multiplayer.lua"))()
 local FileWriter  = assert(SMODS.load_file("lib/file_writer.lua"))()
+local HttpClient  = assert(SMODS.load_file("lib/http_client.lua"))()
 local LivePublisher = assert(SMODS.load_file("lib/live_publisher.lua"))()
 local Pairing     = assert(SMODS.load_file("lib/pairing.lua"))()
 local PairingUI   = assert(SMODS.load_file("lib/pairing_ui.lua"))()
@@ -148,6 +149,11 @@ local live_publisher = LivePublisher.new({
 local pairing = Pairing.new({
     config = config,
     logger = function(msg) Logger.warning(msg) end,
+    -- Injected at LOAD time on purpose. SMODS.load_file only resolves without a
+    -- mod id while the mod is loading, so resolving these lazily on a button
+    -- press (runtime) fails. Passing them in removes that failure mode entirely.
+    http_client = HttpClient,
+    serializer  = Serializer,
 })
 PairingUI.register_funcs(pairing)
 mod.config_tab = PairingUI.make_config_tab(pairing, config)

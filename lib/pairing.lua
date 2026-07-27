@@ -208,8 +208,46 @@ end
 -- / love.system.openURL), overridable for tests
 -- ---------------------------------------------------------------------------
 
+--- Load one of this mod's own files.
+---
+--- In Balatro, SMODS loads mod files with `SMODS.load_file`; plain `require`
+--- does NOT resolve them, because the mod's directory is not on package.path.
+--- Under busted there is no SMODS and `require` is what works. Every lazy
+--- sibling load in this file sat on the `require` path only, so it failed the
+--- moment it was first reached at runtime -- invisible until then, because
+--- these are all inside pcall-wrapped send paths.
+--- @param path string     SMODS path, e.g. "lib/serializer.lua"
+--- @param modname string  require name, e.g. "lib.serializer"
+local sibling_cache = {}
+local function load_sibling(path, modname)
+    local cached = sibling_cache[modname]
+    if cached ~= nil then return cached end
+
+    local smods = rawget(_G, "SMODS")
+    if smods and smods.load_file then
+        -- The mod id is REQUIRED here. SMODS.load_file(path) without an id only
+        -- works while the mod is first loading (it reads SMODS.current_mod);
+        -- at runtime -- e.g. a button press -- current_mod is nil and it errors
+        -- with "No ID was provided!". See smods/src/preflight/loader.lua:870-873.
+        local ok, chunk = pcall(smods.load_file, path, "Antelytics")
+        if ok and type(chunk) == "function" then
+            local loaded = chunk()
+            sibling_cache[modname] = loaded
+            return loaded
+        end
+    end
+
+    local ok2, loaded2 = pcall(require, modname)
+    if ok2 then
+        sibling_cache[modname] = loaded2
+        return loaded2
+    end
+
+    error("could not load " .. path .. " (tried SMODS.load_file and require)")
+end
+
 local function encode_json(value)
-    local Serializer = require("lib.serializer")
+    local Serializer = load_sibling("lib/serializer.lua", "lib.serializer")
     return Serializer.encode(value or {})
 end
 
@@ -218,7 +256,7 @@ end
 --- degrades to "no body" for the pure core instead of crashing the shell.
 local function decode_json(text)
     if type(text) ~= "string" or text == "" then return nil end
-    local Serializer = require("lib.serializer")
+    local Serializer = load_sibling("lib/serializer.lua", "lib.serializer")
     local ok, result = pcall(Serializer.decode, text)
     if not ok or type(result) ~= "table" then return nil end
     return result
@@ -230,17 +268,18 @@ end
 --- the next call without re-wiring.
 --- @param config table   the mod.config table (reads live_url)
 --- @return fun(path: string, body: table, callback: fun(ok: boolean, http_status: number|nil, body: table|nil))
-local function make_default_sender(config)
+--- @param config table       reads live_url
+--- @param http_client table|nil  injected at load time by main.lua
+local function make_default_sender(config, http_client)
     return function(path, body, callback)
-        local smods = rawget(_G, "SMODS")
-        if not smods or not smods.https or not smods.https.asyncRequest then
-            error("SMODS.https.asyncRequest is not available")
-        end
+        -- SMODS registers its HTTPS client as a module named "SMODS.https", not
+        -- as a field on the SMODS global — see lib/http_client.lua.
+        local client = (http_client or load_sibling("lib/http_client.lua", "lib.http_client")).require_client()
         local base_url = config and config.live_url
         if type(base_url) ~= "string" or base_url == "" then
             error("live_url is not configured")
         end
-        smods.https.asyncRequest(base_url .. path, {
+        client.asyncRequest(base_url .. path, {
             method = "POST",
             headers = { ["Content-Type"] = "application/json" },
             data = encode_json(body),
@@ -291,7 +330,7 @@ function Pairing.new(deps)
     local config = deps.config or {}
     local self = setmetatable({
         config         = config,
-        sender         = deps.sender or make_default_sender(config),
+        sender         = deps.sender or make_default_sender(config, deps.http_client),
         clock          = deps.clock or os.time,
         logger         = deps.logger or function() end,
         save_config    = deps.save_config or default_save_config,
