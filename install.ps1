@@ -41,6 +41,21 @@ $Excludes = @(
 # All must survive a reinstall.
 $PreserveNames = @('log', 'session.log', 'config.lua')
 
+# A stale copy parked by Balatro Mod Manager. BMM "disables" a mod by moving
+# its folder into Mods\_disabled\ and blacklisting that container; this script
+# only ever manages Mods\Antelytics, so a parked older install survives every
+# reinstall. Steamodded's loader recurses into _disabled\, finds the second
+# Antelytics.json, and (JSON-manifest branch, no duplicate-id guard) lets the
+# LATER-scanned parked copy overwrite SMODS.Mods.Antelytics with
+# blacklist_name = "_disabled". The in-game Antelytics toggle then flips the
+# whole _disabled container -- i.e. every mod BMM has parked, which is how
+# "enabling Antelytics enabled Multiplayer". Remove it.
+$parked = Join-Path (Split-Path $ModsDir -Parent) '_disabled\Antelytics'
+if (Test-Path $parked) {
+    Write-Warning "Removing stale parked copy at $parked (BMM leftover; it shadows the real install)"
+    Remove-Item -Recurse -Force $parked
+}
+
 if (Test-Path $ModsDir) {
     Get-ChildItem -Path $ModsDir -Force | ForEach-Object {
         if ($PreserveNames -notcontains $_.Name) {
