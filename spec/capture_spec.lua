@@ -430,6 +430,35 @@ describe("Capture module", function()
             assert.are.equal("negative", state.jokers[2].edition)
         end)
 
+        it("captures Eternal / Perishable (with tally) stickers on owned jokers", function()
+            -- Stickers are plain booleans on card.ability (card.lua:506-517).
+            -- Capture never recorded them, so the viewer's sticker badges
+            -- (JokerStrip.jsx:102-105) had nothing to draw. Keys are omitted
+            -- when absent, so an unstickered joker stays byte-identical.
+            G.jokers.cards[1].ability = G.jokers.cards[1].ability or {}
+            G.jokers.cards[2].ability = G.jokers.cards[2].ability or {}
+            G.jokers.cards[1].ability.eternal = true
+            G.jokers.cards[2].ability.perishable = true
+            G.jokers.cards[2].ability.perish_tally = 3
+            local state = Capture.build_game_state("play_hand")
+
+            assert.is_true(state.jokers[1].eternal)
+            assert.is_nil(state.jokers[1].perishable)
+            assert.is_nil(state.jokers[1].rental)
+            assert.is_true(state.jokers[2].perishable)
+            assert.are.equal(3, state.jokers[2].perish_tally)
+            assert.is_nil(state.jokers[2].eternal)
+        end)
+
+        it("captures the Rental sticker on an owned joker", function()
+            G.jokers.cards[1].ability = G.jokers.cards[1].ability or {}
+            G.jokers.cards[1].ability.rental = true
+            local state = Capture.build_game_state("play_hand")
+
+            assert.is_true(state.jokers[1].rental)
+            assert.is_nil(state.jokers[2].rental)
+        end)
+
         it("captures joker internal_state maps", function()
             local state = Capture.build_game_state("play_hand")
 
@@ -550,6 +579,31 @@ describe("Capture module", function()
     -- 7. Shop inventory for shop actions vs non-shop actions
     -- -----------------------------------------------------------------------
     describe("shop_inventory", function()
+        it("captures stickers on shop items, and omits the keys when absent", function()
+            -- Shop jokers can carry Perishable/Rental/Eternal from creation
+            -- (card.lua:506-517); the shop item never recorded them, so the
+            -- overlay's shop view showed a stickered joker as plain.
+            G.shop_jokers.cards[1].ability.perishable = true
+            G.shop_jokers.cards[1].ability.perish_tally = 5
+            G.shop_jokers.cards[1].ability.rental = true
+            local state = Capture.build_game_state("buy_joker")
+
+            local banner, voucher
+            for _, item in ipairs(state.shop_inventory) do
+                if item.id == "j_banner" then banner = item end
+                if item.id == "v_grabber" then voucher = item end
+            end
+            assert.is_not_nil(banner)
+            assert.is_true(banner.perishable)
+            assert.are.equal(5, banner.perish_tally)
+            assert.is_true(banner.rental)
+            assert.is_nil(banner.eternal)
+            assert.is_not_nil(voucher)
+            assert.is_nil(voucher.perishable)
+            assert.is_nil(voucher.rental)
+            assert.is_nil(voucher.eternal)
+        end)
+
         it("is populated for buy_joker action", function()
             local state = Capture.build_game_state("buy_joker")
             assert.is_true(#state.shop_inventory > 0)

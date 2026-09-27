@@ -497,6 +497,28 @@ local ROUND_TARGET_JOKERS = {
 
 --- @param joker_cards table  Array of joker card objects from G.jokers.cards.
 --- @return table             Array of joker entry tables.
+--- Stickers (Eternal / Perishable / Rental) live on `card.ability` as plain
+--- booleans -- card.lua:506 set_eternal, :513 set_perishable (which also
+--- stamps `perish_tally`, the rounds left before it debuffs), :381 rental.
+--- Multiplayer 0.5.5 reads these same vanilla fields (lib/card_utils.lua:35-37),
+--- so no MP special-casing. Keys are emitted ONLY when the sticker is present,
+--- matching the omit-defaults convention of the playing-card builder above, and
+--- named exactly as the viewer already reads them (JokerStrip.jsx:102-105):
+--- eternal / perishable / rental / perish_tally. Shared by owned jokers, shop
+--- items and pack contents so a sticker looks the same wherever the card is.
+local function apply_stickers(entry, card)
+    local ability = card and card.ability
+    if type(ability) ~= "table" then return end
+    if ability.eternal then entry.eternal = true end
+    if ability.perishable then
+        entry.perishable = true
+        if type(ability.perish_tally) == "number" then
+            entry.perish_tally = ability.perish_tally
+        end
+    end
+    if ability.rental then entry.rental = true end
+end
+
 local function build_joker_list(joker_cards)
     local list = {}
     for i = 1, #joker_cards do
@@ -553,6 +575,8 @@ local function build_joker_list(joker_cards)
                 entry.edition = joker.edition
             end
         end
+
+        apply_stickers(entry, joker)
 
         -- Enhancement (jokers don't typically have enhancements, but record if present)
         if joker.config and joker.config.center and joker.config.center.key then
@@ -703,7 +727,9 @@ local function build_consumables_list(consumable_cards)
             end
         end
 
-        list[i] = { id = id, name = name, edition = edition }
+        local entry = { id = id, name = name, edition = edition }
+        apply_stickers(entry, card)
+        list[i] = entry
     end
     return list
 end
@@ -887,6 +913,7 @@ local function build_shop_inventory()
             if card.cost then
                 item.cost = card.cost
             end
+            apply_stickers(item, card)
 
             -- Tag-decoration markers. Rare/Uncommon/Foil/Holo/Poly/Negative/
             -- Coupon tags set `card.ability.couponed = true` synchronously
