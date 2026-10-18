@@ -2,10 +2,18 @@ name: Release
 
 # Cut a release by pushing a version tag, e.g.:
 #   git tag v0.1.0-alpha && git push origin v0.1.0-alpha
-# Builds the mod zip and attaches it to a GitHub Release. Tests are enforced
+# Builds the mod zips and attaches them to a GitHub Release. Tests are enforced
 # separately on every push/PR by ci.yml — packaging is just a file copy + zip,
 # so this job needs no Lua toolchain (which keeps releases from breaking on
 # CI-runner Lua/LuaJIT install flakiness).
+#
+# Two zips are built:
+#   dist/Antelytics.zip              — GitHub layout (Antelytics/ top folder), for
+#                                      manual installs and install.ps1/.sh
+#   dist/Antelytics-thunderstore.zip — Thunderstore layout (flat root + manifest,
+#                                      README, icon), attached to the release and,
+#                                      when the THUNDERSTORE_TOKEN secret exists,
+#                                      published to thunderstore.io/c/balatro.
 
 on:
   push:
@@ -23,14 +31,52 @@ env:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      # Secrets cannot be tested in `if:` directly; mirror into env first.
+      THUNDERSTORE_TOKEN: ${{ secrets.THUNDERSTORE_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Build mod zip
         run: bash ./package.sh
 
+      - name: Build Thunderstore zip
+        run: bash ./package-thunderstore.sh
+
+      - name: Read Thunderstore manifest
+        id: ts
+        run: |
+          m=dist/thunderstore/manifest.json
+          echo "version=$(jq -r .version_number "$m")" >> "$GITHUB_OUTPUT"
+          echo "description=$(jq -r .description "$m")" >> "$GITHUB_OUTPUT"
+          echo "website=$(jq -r .website_url "$m")" >> "$GITHUB_OUTPUT"
+          echo "deps=$(jq -r '.dependencies | join(" ")' "$m")" >> "$GITHUB_OUTPUT"
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/Antelytics.zip
+          files: |
+            dist/Antelytics.zip
+            dist/Antelytics-thunderstore.zip
           generate_release_notes: true
+
+      # Publishes the prebuilt zip as-is (the action skips its own build when
+      # `file` is set). Requires the Thunderstore team's service-account token
+      # in the THUNDERSTORE_TOKEN repo secret; without it this step is skipped
+      # and the release still carries the zip for a manual upload at
+      # https://thunderstore.io/c/balatro/create/. Set the repo variable
+      # THUNDERSTORE_NAMESPACE if the team is not called "Chrono".
+      - name: Publish to Thunderstore
+        if: ${{ env.THUNDERSTORE_TOKEN != '' }}
+        uses: GreenTF/upload-thunderstore-package@v4.3
+        with:
+          token: ${{ env.THUNDERSTORE_TOKEN }}
+          community: balatro
+          namespace: ${{ vars.THUNDERSTORE_NAMESPACE || 'Chrono' }}
+          name: Antelytics
+          version: ${{ steps.ts.outputs.version }}
+          description: ${{ steps.ts.outputs.description }}
+          website: ${{ steps.ts.outputs.website }}
+          deps: ${{ steps.ts.outputs.deps }}
+          repo: https://thunderstore.io
+          file: dist/Antelytics-thunderstore.zip

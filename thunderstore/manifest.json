@@ -1,0 +1,7 @@
+{
+  "name": "Antelytics",
+  "version_number": "1.2.3",
+  "website_url": "https://github.com/ChronoFinale/BalatroAntelytics",
+  "description": "Records every decision in a Balatro run (solo or Multiplayer PvP) to one file. Step back through it at antelytics.gg.",
+  "dependencies": ["Steamodded-Steamodded-1.1620.0"]
+}

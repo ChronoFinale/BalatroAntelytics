@@ -52,35 +52,48 @@ either Steamodded line load Antelytics unchanged.
 
 ---
 
-## 2. Thunderstore (to do)
+## 2. Thunderstore (wired; first upload pending)
 
-Package format (verified against Thunderstore's docs and JokerDisplay's
-published zip, 2026-10-18):
+Thunderstore's Balatro community is the mod-manager channel (r2modman / Gale).
+Everything is in the repo; what remains is the one-time account setup below.
 
-- The zip root holds `manifest.json`, `README.md`, `icon.png` (**exactly
-  256×256 PNG**) and the mod files themselves — `Antelytics.json`, `main.lua`,
-  `config.lua`, `lib/`, `LICENSE`. **No `Antelytics/` subfolder**: this is a
-  different zip from the GitHub one. Mod managers create the folder from the
-  package name. Optional `CHANGELOG.md` at the root is shown on the page.
-- `manifest.json`:
+**What ships.** `package-thunderstore.sh` / `.ps1` build
+`dist/Antelytics-thunderstore.zip`, a **different layout** from the GitHub
+zip: the zip root holds `manifest.json`, `README.md`, `CHANGELOG.md`,
+`icon.png` and the mod files flat (`Antelytics.json`, `main.lua`,
+`config.lua`, `lib/`, `LICENSE`) — no `Antelytics/` subfolder; managers create
+the folder from the package name. `release.yml` builds it on every `v*` tag,
+attaches it to the GitHub Release, and publishes it to Thunderstore when the
+`THUNDERSTORE_TOKEN` secret exists (skipped otherwise).
 
-  ```json
-  {
-    "name": "Antelytics",
-    "version_number": "1.2.3",
-    "website_url": "https://github.com/ChronoFinale/BalatroAntelytics",
-    "description": "Records every decision in a Balatro run (solo or Multiplayer PvP) to one file for review at antelytics.gg.",
-    "dependencies": ["Steamodded-Steamodded-1.1620.0"]
-  }
-  ```
+**Metadata** lives in `thunderstore/`:
 
-  `name`: `a-z A-Z 0-9 _` only. `version_number`: plain semver, so strip
-  `~alpha`. `description`: ≤ 250 chars. Pin the **same Steamodded as
-  Multiplayer** (`1.1620.0` as of Multiplayer 0.5.7) so a manager never drags
-  Steamodded 26.x onto a Multiplayer player; bump it when Multiplayer does.
+- `manifest.json` — committed with the real version so a manual upload works
+  as-is; the build re-stamps `version_number` from `Antelytics.json` with the
+  `~alpha` suffix stripped (Thunderstore wants plain semver).
+  `spec/thunderstore_manifest_spec.lua` fails the suite if the two drift, if
+  `name` leaves `[A-Za-z0-9_]`, if `description` exceeds 250 chars, or if the
+  icon is not exactly 256×256. **Bump `version_number` with every release.**
+- `icon.png` — 256×256. The current one is a generated placeholder
+  (`thunderstore/make_icon.py`, viewer palette); replace it with real art any
+  time, same size.
+- Dependency pin: the **same Steamodded as Multiplayer**
+  (`Steamodded-Steamodded-1.1620.0` as of Multiplayer 0.5.7) so a manager never
+  drags Steamodded 26.x onto a Multiplayer player. Bump it when Multiplayer
+  does.
 
-**Still needed before the first upload:** a 256×256 `icon.png` (none in the
-repo), a Thunderstore account + team (`Chrono`), and a `package-thunderstore.sh`
-that stages the flat layout. First upload is manual at
-`thunderstore.io/c/balatro/create/`; later ones can use the
-`GreenTF/upload-thunderstore-package` action with a team API key.
+**One-time setup (Chrono, manual):**
+
+1. Sign in at <https://thunderstore.io> (GitHub/Discord login), create a team
+   named `Chrono` (or set the repo variable `THUNDERSTORE_NAMESPACE` to the
+   name actually chosen).
+2. First upload by hand at <https://thunderstore.io/c/balatro/create/> using
+   `dist/Antelytics-thunderstore.zip` from the latest GitHub Release. This
+   creates the package page; pick its categories there.
+3. Team settings → Service Accounts → create one and copy its token into the
+   repo secret `THUNDERSTORE_TOKEN` (`gh secret set THUNDERSTORE_TOKEN`). Never
+   commit it. From the next tag on, publishing is automatic.
+
+Upload action used: `GreenTF/upload-thunderstore-package@v4.3` with `file:` set
+(it then skips its own build and publishes our zip). `repo:` is passed
+explicitly because the action's default repository is empty in v4.3.
