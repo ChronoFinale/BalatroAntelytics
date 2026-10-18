@@ -2,73 +2,85 @@
 
 Two channels:
 
-1. **GitHub Releases** — the source of the download. Ready now.
-2. **Balatro Mod Manager (BMM)** — the desktop installer most players use. You
-   get listed by a PR to its
-   [`balatro-mod-index`](https://github.com/skyline69/balatro-mod-index) repo,
-   whose `downloadURL` points at the GitHub Release.
+1. **GitHub Releases** — the download of record. Automated: push a `v*` tag.
+2. **Thunderstore** (`thunderstore.io/c/balatro`) — what the mod managers read
+   now (r2modman, Gale, Thunderstore Mod Manager). Steamodded, Balatro
+   Multiplayer and JokerDisplay all publish there. Not set up yet; see §2.
 
-(Thunderstore is intentionally not used — BMM has its own index and doesn't read
-from Thunderstore, and Thunderstore's only Steamodded listing is too old for the
-beta this mod needs.)
+**Balatro Mod Manager is gone as a channel.** Its `skyline69/balatro-mod-index`
+repo was archived on 2026-09-29 ("This index is no longer maintained") and the
+BMM README now points users to r2modman / imm. Antelytics was never listed in
+it. The `bmm/` folder is kept for reference only.
 
 ---
 
-## 1. GitHub Releases (primary, ready)
-
-This is what BMM downloads from.
+## 1. GitHub Releases (primary, automated)
 
 ```sh
-# bump the version in Antelytics.json first if needed, then:
-git tag v0.1.0-alpha
-git push origin v0.1.0-alpha
+# 1. bump "version" in Antelytics.json (e.g. 1.2.3~alpha), add a CHANGELOG entry, commit
+# 2. tag + push the tag
+git tag v1.2.3-alpha
+git push origin v1.2.3-alpha
+# 3. watch it
+gh run list --workflow release.yml --limit 1
+gh run watch
 ```
 
-`.github/workflows/release.yml` runs the tests, builds the zip (`package.sh`),
-and attaches **`BalatroAntelytics.zip`** to a GitHub Release with auto notes.
+`.github/workflows/release.yml` runs `package.sh` and attaches
+**`dist/Antelytics.zip`** to a GitHub Release with auto-generated notes. Tests
+are enforced separately by `ci.yml` on every push, so release.yml needs no Lua
+toolchain.
 
-The asset is then reachable at a stable "latest" URL — the link BMM uses:
+The zip has a single top-level `Antelytics/` folder (so extracting into
+`Mods/` yields `Mods/Antelytics/main.lua`) and is reachable at the stable URL
 
 ```
-https://github.com/ChronoFinale/BalatroAntelytics/releases/latest/download/BalatroAntelytics.zip
+https://github.com/ChronoFinale/BalatroAntelytics/releases/latest/download/Antelytics.zip
 ```
 
-**Manual fallback** (if CI Lua setup hiccups): `./package.ps1` (Windows) or
-`./package.sh` (mac/Linux) → upload `dist/BalatroAntelytics.zip` to a Release.
+**Manual fallback** (if CI hiccups): `./package.ps1` (Windows) or
+`./package.sh` (mac/Linux) → upload `dist/Antelytics.zip` to a Release by hand.
+
+### Steamodded dependency
+
+`Antelytics.json` declares `Steamodded (>=1.0.0~BETA-1221a)`. Leave it. Verified
+against Steamodded 26.1002.0's comparator (`src/preflight/sharedUtil.lua`):
+versions compare major-first, so `26.x` satisfies `>=1.0.0~...` and so does
+every `1.0.0~BETA-*` build. Balatro Multiplayer 0.4.x declares the identical
+string and its Thunderstore package pins Steamodded `1.1620.0`, so players on
+either Steamodded line load Antelytics unchanged.
 
 ---
 
-## 2. Balatro Mod Manager (BMM)
+## 2. Thunderstore (to do)
 
-BMM installs from the `skyline69/balatro-mod-index` repo. The submission files
-are prepared in [`bmm/`](bmm/) — `meta.json` + `description.md`.
+Package format (verified against Thunderstore's docs and JokerDisplay's
+published zip, 2026-10-18):
 
-**Steps**
-1. Cut a GitHub Release first (above) so the `downloadURL` resolves.
-2. Fork `skyline69/balatro-mod-index`, add a folder `mods/Chrono@Antelytics/`
-   containing `meta.json`, `description.md`, and optionally `thumbnail.jpg`
-   (1920×1080 max, JPEG). Copy them from `bmm/`.
-   - Or use the helper: https://bmi-helper.dasguney.com/
-3. Open a PR to its `main` branch. A GitHub Action validates it, then a
-   maintainer reviews.
+- The zip root holds `manifest.json`, `README.md`, `icon.png` (**exactly
+  256×256 PNG**) and the mod files themselves — `Antelytics.json`, `main.lua`,
+  `config.lua`, `lib/`, `LICENSE`. **No `Antelytics/` subfolder**: this is a
+  different zip from the GitHub one. Mod managers create the folder from the
+  package name. Optional `CHANGELOG.md` at the root is shown on the page.
+- `manifest.json`:
 
-**Before submitting, double-check:**
-- The **release must exist first** — the validator fetches `downloadURL` and
-  requires a real file (HTTP 2xx, not a `/blob/`,`/tree/`, or page URL). Our
-  `…/releases/latest/download/BalatroAntelytics.zip` only resolves once a
-  Release is published.
-- `categories` is set to `["Technical", "Quality of Life"]`. Allowed values
-  (verified against the index's check-mod.yml): Content, Joker, Quality of Life,
-  Technical, Miscellaneous, Resource Packs, API.
-- `version` matches the released tag (strip `~alpha` → `0.1.0`).
-- `"requires-steamodded": true` is enough — no Steamodded version pin needed.
+  ```json
+  {
+    "name": "Antelytics",
+    "version_number": "1.2.3",
+    "website_url": "https://github.com/ChronoFinale/BalatroAntelytics",
+    "description": "Records every decision in a Balatro run (solo or Multiplayer PvP) to one file for review at antelytics.gg.",
+    "dependencies": ["Steamodded-Steamodded-1.1620.0"]
+  }
+  ```
 
-Updates are automatic: `meta.json` sets `"automatic-version-check": true` and
-the `downloadURL` is the `/latest/` link, so the index's Version Update Bot
-bumps our `version` whenever you publish a new GitHub Release — no follow-up PR
-needed. (Only fixed-tag download URLs need `fixed-release-tag-updates`; ours
-doesn't.)
+  `name`: `a-z A-Z 0-9 _` only. `version_number`: plain semver, so strip
+  `~alpha`. `description`: ≤ 250 chars. Pin the **same Steamodded as
+  Multiplayer** (`1.1620.0` as of Multiplayer 0.5.7) so a manager never drags
+  Steamodded 26.x onto a Multiplayer player; bump it when Multiplayer does.
 
-Note: the index schema has no "requires-multiplayer" field — Balatro Multiplayer
-is optional and is documented in `description.md` instead. We only set
-`requires-steamodded: true`.
+**Still needed before the first upload:** a 256×256 `icon.png` (none in the
+repo), a Thunderstore account + team (`Chrono`), and a `package-thunderstore.sh`
+that stages the flat layout. First upload is manual at
+`thunderstore.io/c/balatro/create/`; later ones can use the
+`GreenTF/upload-thunderstore-package` action with a team API key.

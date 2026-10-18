@@ -4,6 +4,24 @@ All notable changes to the Antelytics capture mod. The companion viewer at
 [antelytics.gg](https://www.antelytics.gg) updates continuously and isn't tied
 to these versions.
 
+## v1.2.3-alpha
+
+- **Joker stickers now really captured** -- eternal / perishable (with its
+  rounds-left countdown) / rental. v1.2.0 and v1.2.1 announced this, but the
+  keys never existed in capture: 0 of 3,613 real shop items carried one. They
+  are now recorded on owned jokers, shop offers and pack contents alike, so the
+  viewer's sticker chips light up. (Existing runs won't have them; new runs
+  will.)
+- **RNG pool depths captured** (`state.pools`) -- how far each pseudorandom
+  chain has advanced, the groundwork for hidden-info readouts such as tarot
+  queue position. Stays in your local run file only.
+- **Installer fix** -- `install.ps1` removes a copy Balatro Mod Manager may have
+  parked under `Mods/_disabled`. Steamodded was loading that copy in place of
+  the real one, which made the in-game Antelytics toggle flip every parked mod
+  (Multiplayer included).
+- **Antelytics Live ships dark** -- the live-casting code is in this build but
+  cannot be enabled; its config keys are reserved and ignored for now.
+
 ## v1.2.2-alpha
 
 - **Negative edition captured** — a Negative joker was being recorded as a plain
