@@ -16,7 +16,15 @@ through the whole run, ante by ante. Built with **Balatro Multiplayer** in mind
 - [Steamodded](https://github.com/Steamodded/smods) `1.0.0-BETA-1221a` or newer
 - (optional) [Balatro Multiplayer](https://github.com/Balatro-Multiplayer/BalatroMultiplayer) — needed only for PvP capture
 
-**Steps**
+### Option A — mod manager (r2modman / Thunderstore Mod Manager)
+
+Install **[Antelytics from Thunderstore](https://thunderstore.io/c/balatro/p/Chrono/Antelytics/)**
+inside the manager. It pulls in Steamodded and lovely for you. Launch Balatro
+with the manager's **Start modded** button — the manager runs the game against
+its own profile folder, so nothing is copied into your real Balatro folder.
+
+### Option B — manual
+
 1. Download the latest **`Antelytics.zip`** from the
    [Releases page](https://github.com/ChronoFinale/BalatroAntelytics/releases).
 2. Extract it. You'll get an `Antelytics` folder containing `main.lua` and
@@ -32,20 +40,37 @@ through the whole run, ante by ante. Built with **Balatro Multiplayer** in mind
    The result should be `…/Mods/Antelytics/main.lua`.
 4. Launch Balatro. If it loaded, Antelytics shows up in the in-game Mods list.
 
-> Balatro Mod Manager users: drop the folder into the managed Mods directory the
-> same way — it's a standard Steamodded mod.
+### Where the files end up
+
+Antelytics writes its run files to a `log` folder **next to wherever it was
+installed** — it asks Steamodded for its own location, so both install methods
+work without any configuration. The two methods just put the mod in different
+places:
+
+| Install method | Mod folder | Run files |
+|---|---|---|
+| **Manual** | `…/Balatro/Mods/Antelytics/` | `…/Balatro/Mods/Antelytics/log/` |
+| **r2modman** | `<profile>/mods/Chrono-Antelytics/` | `<profile>/mods/Chrono-Antelytics/log/` |
+
+`<profile>` is the manager's profile directory: in r2modman use
+**Settings → Browse profile folder**. By default that is
+`%APPDATA%\r2modmanPlus-local\Balatro\profiles\<profile name>\` on Windows.
+A manual copy and a manager copy don't see each other; whichever way you launch
+the game is the one that records.
 
 ---
 
 ## How to use it
 
 1. **Play a run.** Antelytics records it automatically — nothing to turn on.
-2. When you want to review it, find your run file in the mod's `log` folder:
+2. When you want to review it, find your run file in the mod's `log` folder
+   (see *Where the files end up* above):
 
-   | OS | Log folder |
+   | Install | Log folder |
    |---|---|
-   | **Windows** | `%APPDATA%\Balatro\Mods\Antelytics\log\` |
-   | **macOS** | `~/Library/Application Support/Balatro/Mods/Antelytics/log/` |
+   | **Manual, Windows** | `%APPDATA%\Balatro\Mods\Antelytics\log\` |
+   | **Manual, macOS** | `~/Library/Application Support/Balatro/Mods/Antelytics/log/` |
+   | **r2modman** | `<profile>\mods\Chrono-Antelytics\log\` (Settings → Browse profile folder) |
 
    Files are named `<run_id>.json.gz`.
 3. Open **[www.antelytics.gg](https://www.antelytics.gg)** and load that file (the **↑ Load
