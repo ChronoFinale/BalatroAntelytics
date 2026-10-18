@@ -82,17 +82,20 @@ attaches it to the GitHub Release, and publishes it to Thunderstore when the
   drags Steamodded 26.x onto a Multiplayer player. Bump it when Multiplayer
   does.
 
-**One-time setup (Chrono, manual):**
+**One-time setup (Chrono, browser only — Thunderstore has no API for it):**
 
 1. Sign in at <https://thunderstore.io> (GitHub/Discord login), create a team
    named `Chrono` (or set the repo variable `THUNDERSTORE_NAMESPACE` to the
    name actually chosen).
-2. First upload by hand at <https://thunderstore.io/c/balatro/create/> using
-   `dist/Antelytics-thunderstore.zip` from the latest GitHub Release. This
-   creates the package page; pick its categories there.
-3. Team settings → Service Accounts → create one and copy its token into the
-   repo secret `THUNDERSTORE_TOKEN` (`gh secret set THUNDERSTORE_TOKEN`). Never
-   commit it. From the next tag on, publishing is automatic.
+2. Team settings → Service Accounts → create one and copy its token into the
+   repo secret: `gh secret set THUNDERSTORE_TOKEN -R ChronoFinale/BalatroAntelytics`.
+   Never commit it. Done 2026-10-18.
+
+**Publishing.** Every `v*` tag publishes automatically. To publish without a
+new tag (first upload, or a retry), run the workflow by hand:
+`gh workflow run release.yml --ref main` — it rebuilds the zips and runs only
+the Thunderstore step; the GitHub Release step is skipped off-tag. The first
+publish creates the package page; categories can be edited on the site after.
 
 Upload action used: `GreenTF/upload-thunderstore-package@v4.3` with `file:` set
 (it then skips its own build and publishes our zip). `repo:` is passed
