@@ -22,12 +22,22 @@
 --- opted in via config (live_enabled + live_url + live_token), each node is
 --- also POSTed to a live server, fire-and-forget. Off by default; zero cost
 --- when disabled.
+---
+--- Live ships DARK in this release: LIVE_AVAILABLE below is false, so the live
+--- modules still load (and stay unit-tested) but nothing is wired -- no
+--- publisher, no "Link account" config tab -- and config.live_enabled is
+--- forced off even if someone hand-edits config.lua.
 
 local mod = SMODS.current_mod
 local config = mod.config or {}
 local player_id = config.player_id or "anonymous"
 local enabled   = config.enabled
 if enabled == nil then enabled = true end
+
+-- Antelytics Live kill switch. false = the feature cannot be turned on by any
+-- config edit. Flip to true, deliberately, to wire the publisher and the "Link
+-- account" tab back in. spec/release_gate_spec.lua pins this value.
+local LIVE_AVAILABLE = false
 
 -- ---------------------------------------------------------------------------
 -- Load submodules
@@ -129,38 +139,48 @@ local file_writer = FileWriter.new({
     mod_path   = mod.path,
 })
 
--- Fire-and-forget live publishing (Antelytics Live). Off by default; a no-op
--- unless config.live_enabled is true and both live_url/live_token are set.
--- `config` here is the actual mod.config table, so runtime toggles apply.
-local live_publisher = LivePublisher.new({
-    config      = config,
-    logger      = function(msg) Logger.warning(msg) end,
-    mod_version = mod.version,
-})
+-- Antelytics Live: fire-and-forget publishing plus its "Link account"
+-- device-code pairing flow. Both exist only when LIVE_AVAILABLE. Otherwise
+-- live_publisher and pairing stay nil, the recorder gets no live sink, no
+-- config tab is registered, and live_enabled is forced off so a stale or
+-- hand-edited config.lua cannot switch it on.
+local live_publisher, pairing
+if LIVE_AVAILABLE then
+    -- A no-op unless config.live_enabled is true and both live_url/live_token
+    -- are set. `config` here is the actual mod.config table, so runtime
+    -- toggles apply.
+    live_publisher = LivePublisher.new({
+        config      = config,
+        logger      = function(msg) Logger.warning(msg) end,
+        mod_version = mod.version,
+    })
 
--- "Link account" pairing flow (Antelytics Live device-code pairing). Never
--- hand-edit config.lua for the stream key: the mod config tab's "Link
--- account" button drives this, and it's the only thing that writes
--- config.live_token/linked_user. `config` is the actual mod.config table
--- (by reference), same as live_publisher above, so approval/unlink are
--- visible immediately without re-wiring. Registers G.FUNCS.antelytics_* and
--- mod.config_tab; polling is driven from love.update below and is a no-op
--- (zero network cost) whenever no pairing is in flight.
-local pairing = Pairing.new({
-    config = config,
-    logger = function(msg) Logger.warning(msg) end,
-    -- Injected at LOAD time on purpose. SMODS.load_file only resolves without a
-    -- mod id while the mod is loading, so resolving these lazily on a button
-    -- press (runtime) fails. Passing them in removes that failure mode entirely.
-    http_client = HttpClient,
-    serializer  = Serializer,
-    -- A successful relink just wrote a brand-new stream_key: any earlier
-    -- "unauthorized" halt on live_publisher was about the OLD token, so
-    -- clear it and let sending resume with the new one.
-    on_relink = function() live_publisher:reset_auth_state() end,
-})
-PairingUI.register_funcs(pairing)
-mod.config_tab = PairingUI.make_config_tab(pairing, config, live_publisher)
+    -- Never hand-edit config.lua for the stream key: the mod config tab's
+    -- "Link account" button drives this, and it's the only thing that writes
+    -- config.live_token/linked_user. `config` is the actual mod.config table
+    -- (by reference), same as live_publisher above, so approval/unlink are
+    -- visible immediately without re-wiring. Registers G.FUNCS.antelytics_*
+    -- and mod.config_tab; polling is driven from love.update below and is a
+    -- no-op (zero network cost) whenever no pairing is in flight.
+    pairing = Pairing.new({
+        config = config,
+        logger = function(msg) Logger.warning(msg) end,
+        -- Injected at LOAD time on purpose. SMODS.load_file only resolves
+        -- without a mod id while the mod is loading, so resolving these lazily
+        -- on a button press (runtime) fails. Passing them in removes that
+        -- failure mode entirely.
+        http_client = HttpClient,
+        serializer  = Serializer,
+        -- A successful relink just wrote a brand-new stream_key: any earlier
+        -- "unauthorized" halt on live_publisher was about the OLD token, so
+        -- clear it and let sending resume with the new one.
+        on_relink = function() live_publisher:reset_auth_state() end,
+    })
+    PairingUI.register_funcs(pairing)
+    mod.config_tab = PairingUI.make_config_tab(pairing, config, live_publisher)
+else
+    config.live_enabled = false
+end
 
 local recorder = Recorder.new({
     file_writer    = file_writer,
@@ -1438,7 +1458,7 @@ love.update = function(dt)
     -- "Link account" pairing poll. Pairing:tick() is a no-op (no network
     -- call at all) unless a pairing is actually in flight and its poll
     -- interval has elapsed — see lib/pairing.lua Pairing.should_poll.
-    pcall(function() pairing:tick() end)
+    if pairing then pcall(function() pairing:tick() end) end
 
     -- Idle-flush detector (Bug F): if the player returned to the main
     -- menu without triggering love.quit (e.g. via the in-game menu),

@@ -6,29 +6,12 @@ return {
   -- Toggle the mod on/off without uninstalling
   enabled   = true,
 
-  -- Live casting (Antelytics Live) — opt-in, off by default. When enabled
-  -- and both live_url/live_token are set, each captured Decision_Node is
-  -- POSTed to <live_url>/api/live/node as it happens. Fire-and-forget:
-  -- never blocks or errors the run.
-  --
-  -- live_token is your personal STREAM KEY: get one WITHOUT hand-editing
-  -- this file by opening the mod's Config tab in-game and clicking "Link
-  -- account" — that starts a short device-pairing flow (a code + a browser
-  -- approval page at antelytics.gg) and fills in live_token/linked_user for
-  -- you on approval. It is NOT the link you paste into OBS — an overlay URL
-  -- is a separate, read-only token, precisely so the thing that appears on
-  -- stream can't be used to write.
-  --
-  -- SMODS stores mod config as plain (unencrypted) text on disk, so treat
-  -- this file's contents as world-readable. The token is narrowly scoped
-  -- (publish-only) and can be revoked any time from the Config tab's
-  -- "Unlink" button (or by generating a new one on antelytics.gg).
+  -- Antelytics Live (streaming each decision to antelytics.gg as it happens)
+  -- is NOT available in this release. The keys below are reserved for it and
+  -- are ignored: main.lua forces live_enabled off at load, so editing this
+  -- file cannot turn it on. Leave them as they are.
   live_enabled = false,
-  -- Defaulted so "Link account" works out of the box: the pairing flow has to
-  -- call <live_url>/api/live/pair/start, so an empty value would break the very
-  -- flow that exists to avoid hand-editing this file. Not a secret, and enables
-  -- nothing on its own — live_enabled above is the actual switch.
   live_url     = "https://www.antelytics.gg",
-  live_token   = "", -- your stream key — set via "Link account" in-game, not by hand
-  linked_user  = "", -- display name of the linked antelytics.gg account, if any
+  live_token   = "",
+  linked_user  = "",
 }
