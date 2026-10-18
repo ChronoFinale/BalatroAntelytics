@@ -22,6 +22,8 @@ Install **[Antelytics from Thunderstore](https://thunderstore.io/c/balatro/p/Chr
 inside the manager. It pulls in Steamodded and lovely for you. Launch Balatro
 with the manager's **Start modded** button — the manager runs the game against
 its own profile folder, so nothing is copied into your real Balatro folder.
+Mod managers currently exist for **Windows and Linux only** — on macOS use
+Option B.
 
 ### Option B — manual
 
