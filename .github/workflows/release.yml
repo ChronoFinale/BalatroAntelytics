@@ -82,5 +82,12 @@ jobs:
           description: ${{ steps.ts.outputs.description }}
           website: ${{ steps.ts.outputs.website }}
           deps: ${{ steps.ts.outputs.deps }}
+          # Balatro community slugs (api/experimental/community/balatro/category).
+          # ai-generated is required by Thunderstore policy: a significant part
+          # of this mod was written with AI coding tools.
+          categories: |
+            ai-generated
+            tools
+            mods
           repo: https://thunderstore.io
           file: dist/Antelytics-thunderstore.zip
