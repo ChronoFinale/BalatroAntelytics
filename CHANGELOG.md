@@ -4,7 +4,7 @@ All notable changes to the Antelytics capture mod. The companion viewer at
 [antelytics.gg](https://www.antelytics.gg) updates continuously and isn't tied
 to these versions.
 
-## Unreleased
+## v1.3.0-alpha
 
 - **Seed stays private until the run is over.** In-progress and interrupted
   run files now carry `seed: null`, nodes no longer record the seed, and run
