@@ -239,32 +239,10 @@ function hooks.register_all(deps)
                 seed = tostring(G.GAME.seeded)
             end
 
-            -- Resume detection: if the game loaded mid-run (ante > 1, or
-            -- ante == 1 but past the first blind), this is a continue rather
-            -- than a fresh start. Look for an interrupted file with the same
-            -- seed and reuse its run_id so capture appends to the same
-            -- logical run. Falls back to a fresh run_id when no match found.
-            local ante = 1
-            pcall(function()
-                ante = G.GAME.round_resets.ante or 1
-            end)
-            local is_resume = ante > 1
-
-            local run_id
-            if is_resume and deps.file_writer then
-                local previous_id = deps.file_writer:find_interrupted_run_for_seed(seed)
-                if previous_id then
-                    run_id = previous_id
-                    if logger.info then
-                        logger.info("Run resumed: " .. run_id
-                            .. " (ante=" .. tostring(ante) .. ")")
-                    end
-                end
-            end
-
-            if not run_id then
-                run_id = generate_run_id(deps.file_writer, timestamp)
-            end
+            -- No save/quit/continue detection: continuing a saved game is a
+            -- fresh run file. Matching the pre-quit file would need the seed
+            -- (or a derivative of it) on disk mid-run, which we don't do.
+            local run_id = generate_run_id(deps.file_writer, timestamp)
 
             local gamemode_label = "solo"
             if gate and gate.current_gamemode() then
@@ -288,7 +266,6 @@ function hooks.register_all(deps)
                 seed,
                 timestamp,
                 gamemode_label,
-                nil,  -- previous_run_id (handled separately for resumes)
                 deck_back,
                 stake_level
             )
@@ -786,33 +763,6 @@ function hooks.register_all(deps)
             end,
         }
     end
-
-    -- -----------------------------------------------------------------------
-    -- G.FUNCS.continue — resume detection (primary signal for Bug F)
-    --
-    -- G.FUNCS.continue may not exist at cold mod load (it's created by
-    -- Balatro's UI setup). We register via wrap_or_defer so the retry
-    -- loop in love.update installs it once the function appears.
-    --
-    -- The wrapper runs the original first (so the game's continue logic
-    -- always executes), then calls deps.on_resume_detected if that
-    -- callback is present in deps. The callback is responsible for
-    -- scanning the log directory and starting the resumed run.
-    --
-    -- Open Question 6: G.FUNCS.continue existence must be verified
-    -- against the installed Balatro build during live testing. The
-    -- fallback in mod.reset_game_globals is load-bearing if this hook
-    -- is absent.
-    -- -----------------------------------------------------------------------
-    wrap_or_defer("G.FUNCS", "continue", function(original, ...)
-        local result = original(...)
-        pcall(function()
-            if deps.on_resume_detected then
-                deps.on_resume_detected()
-            end
-        end)
-        return result
-    end)
 
     -- -----------------------------------------------------------------------
     -- Diagnostic: log which hooks were successfully registered

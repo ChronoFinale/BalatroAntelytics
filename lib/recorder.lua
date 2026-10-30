@@ -34,12 +34,12 @@ function Recorder.new(deps)
     }, Recorder)
 end
 
-function Recorder:start_run(run_id, player_id, seed, start_timestamp, gamemode, previous_run_id, deck_back, stake)
+function Recorder:start_run(run_id, player_id, seed, start_timestamp, gamemode, deck_back, stake)
     self.run_id = run_id
     self.seq    = 0
     self.active = true
     if self.file_writer then
-        self.file_writer:start_run(run_id, player_id, seed, start_timestamp, gamemode, previous_run_id, deck_back, stake)
+        self.file_writer:start_run(run_id, player_id, seed, start_timestamp, gamemode, deck_back, stake)
     end
 end
 

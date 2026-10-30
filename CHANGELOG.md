@@ -10,8 +10,10 @@ to these versions.
   run files now carry `seed: null`, nodes no longer record the seed, and run
   files are named `<timestamp>_<random>.json.gz` instead of starting with the
   seed. The seed is stamped onto the file once the run ends in a win or loss.
-  Resume detection matches on a salted digest (`seed_tag`, salt in
-  `log/.seed_salt`) instead of the seed itself.
+- **Continuing a saved game starts a new run file.** Matching the pre-quit
+  file needed the seed on disk mid-run, so that detection is gone. The
+  pre-quit file keeps `outcome: "interrupted"`; the continued session is
+  recorded as its own run from the point you resumed.
 
 ## v1.2.3-alpha
 

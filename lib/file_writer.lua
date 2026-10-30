@@ -19,10 +19,10 @@
 --- Seed privacy: the seed is written to disk ONLY once the run is over
 --- (outcome "win" or "loss"). In-progress and interrupted files carry
 --- `seed: null`, the run_id / filename is `<timestamp>_<random hex>` and
---- contains no seed, and nodes carry no seed. Resume detection instead
---- matches on `seed_tag`, a digest of the seed keyed with a random
---- per-install salt (`log/.seed_salt`), which cannot be reversed to the
---- seed by someone who only holds the run file.
+--- contains no seed, and nodes carry no seed. Consequently there is no
+--- save/quit/continue detection: continuing a saved game starts a new
+--- run file, and the pre-quit file stays as it was (outcome
+--- "interrupted", no seed).
 ---
 --- Final file format (after gzip decompression):
 ---   {
@@ -30,7 +30,6 @@
 ---     "run_id":          string,
 ---     "player_id":       string,
 ---     "seed":            string | null   (null until the run is over),
----     "seed_tag":        string | null   (salted digest, see above),
 ---     "gamemode":        string,
 ---     "start_timestamp": number,
 ---     "end_timestamp":   number | null,
@@ -45,13 +44,12 @@ FileWriter.__index = FileWriter
 
 local FORMAT_VERSION = "1.0"
 local FINAL_EXT      = ".json.gz"
-local SALT_FILE      = ".seed_salt"
 
 -- Outcomes after which the run is over and the seed may be written.
 local FINAL_OUTCOMES = { win = true, loss = true }
 
 -- ---------------------------------------------------------------------------
--- Identifiers and digests (pure Lua with LÖVE fast paths)
+-- Identifiers
 -- ---------------------------------------------------------------------------
 
 local HEX_DIGITS = "0123456789abcdef"
@@ -75,25 +73,6 @@ function FileWriter.random_hex(n, rng)
         out[i] = HEX_DIGITS:sub(k, k)
     end
     return table.concat(out)
-end
-
---- Hex digest of a string. SHA-256 via love.data when available; otherwise
---- two 32-bit multiplicative lanes (test environments without LÖVE only).
-function FileWriter.digest(s)
-    s = tostring(s)
-    if love and love.data and love.data.hash and love.data.encode then
-        local ok, hex = pcall(function()
-            return love.data.encode("string", "hex", love.data.hash("sha256", s))
-        end)
-        if ok and type(hex) == "string" and #hex > 0 then return hex end
-    end
-    local function lane(h, mul)
-        for i = 1, #s do
-            h = (h * mul + s:byte(i)) % 4294967296
-        end
-        return string.format("%08x", h)
-    end
-    return lane(5381, 33) .. lane(7919, 65599)
 end
 
 -- ---------------------------------------------------------------------------
@@ -227,7 +206,6 @@ end
 ---   mod_path    = string  (path to mod directory; "" disables NFS),
 ---   fs          = optional filesystem facade for testing,
 ---   compress    = optional compression function (string -> string),
----   hash        = optional digest function (string -> hex string),
 ---   random      = optional RNG (function -> number in [0, 1)),
 --- }
 function FileWriter.new(deps)
@@ -238,9 +216,7 @@ function FileWriter.new(deps)
         mod_path   = deps.mod_path or "",
         fs         = deps.fs or build_default_fs(deps.mod_path or ""),
         compress   = deps.compress or default_compress,
-        hash       = deps.hash or FileWriter.digest,
         random     = deps.random or default_random,
-        salt       = nil,  -- lazily loaded from SALT_FILE
 
         -- Per-run state, reset on each start_run
         run_id          = nil,
@@ -249,7 +225,6 @@ function FileWriter.new(deps)
         gamemode        = nil,
         start_timestamp = nil,
         nodes           = {},
-        previous_run_id = nil,
     }, FileWriter)
     return self
 end
@@ -259,27 +234,6 @@ end
 --- keeps a directory listing in chronological order.
 function FileWriter:new_run_id(timestamp)
     return tostring(timestamp or os.time()) .. "_" .. FileWriter.random_hex(8, self.random)
-end
-
---- The per-install salt, created on first use and persisted to SALT_FILE
---- in the log directory. Cached on self afterwards.
-function FileWriter:get_salt()
-    if self.salt then return self.salt end
-    local salt
-    pcall(function() salt = self.fs:read(SALT_FILE) end)
-    if type(salt) ~= "string" or #salt < 16 then
-        salt = FileWriter.random_hex(32, self.random)
-        pcall(function() self.fs:write(SALT_FILE, salt) end)
-    end
-    self.salt = salt
-    return salt
-end
-
---- Salted digest of a seed, or nil when the seed is unknown. Equal for the
---- same seed on the same install; meaningless anywhere else.
-function FileWriter:seed_tag(seed)
-    if seed == nil or seed == "" or seed == "unknown" then return nil end
-    return self.hash(self:get_salt() .. ":" .. tostring(seed))
 end
 
 --- Build the record written by end_run and flush_partial. The seed is
@@ -292,7 +246,6 @@ function FileWriter:build_record(outcome, final_ante, pvp_summary)
         run_id          = self.run_id,
         player_id       = self.player_id,
         seed            = is_final and self.seed or null,
-        seed_tag        = self:seed_tag(self.seed) or null,
         gamemode        = self.gamemode or "solo",
         deck_back       = self.deck_back or null,
         stake           = self.stake or null,
@@ -303,14 +256,6 @@ function FileWriter:build_record(outcome, final_ante, pvp_summary)
         pvp_summary     = pvp_summary or null,
         nodes           = self.nodes,
     }
-    -- Include chain-link fields only when they carry a value.
-    -- Using Lua nil omits the key from JSON entirely (cleaner than
-    -- encoding as JSON null for fields that are absent on most runs).
-    if self.previous_run_id then
-        record.previous_run_id = self.previous_run_id
-    end
-    -- next_run_id is always absent at write time; it is patched in
-    -- later by patch_previous_run_header when a resume is detected.
     return record
 end
 
@@ -319,18 +264,13 @@ end
 -- ---------------------------------------------------------------------------
 
 --- Begin a new run. Clears any accumulated nodes from a previous run.
---- @param previous_run_id string | nil  run_id of the interrupted run this
----   resumes, or nil for a fresh run. Stored on self and included in every
----   record written by end_run and flush_partial as a top-level
----   `previous_run_id` field (JSON null when absent).
-function FileWriter:start_run(run_id, player_id, seed, start_timestamp, gamemode, previous_run_id, deck_back, stake)
+function FileWriter:start_run(run_id, player_id, seed, start_timestamp, gamemode, deck_back, stake)
     self.run_id          = run_id
     self.player_id       = player_id or "anonymous"
     self.seed            = seed or "unknown"
     self.gamemode        = gamemode or "solo"
     self.start_timestamp = start_timestamp or os.time()
     self.nodes           = {}
-    self.previous_run_id = previous_run_id or nil
     self.deck_back       = deck_back or nil
     self.stake           = stake or nil
     self.logger("FileWriter: started run " .. tostring(run_id))
@@ -448,115 +388,6 @@ function FileWriter:flush_partial()
     end
 end
 
---- Patch the header of a previous run file to set next_run_id and
---- (when appropriate) upgrade outcome to "interrupted".
----
---- Reads the previous file via fs:read, decodes JSON, updates the
---- header fields, re-encodes, and writes back atomically. Wrapped in
---- pcall — failure to find or read the previous file logs a warning
---- but never aborts the resume.
----
---- Rules:
----   - next_run_id is always set to the provided value.
----   - outcome is set to "interrupted" only when currently null or
----     "in_progress". Completed runs ("win" / "loss") keep their
----     final outcome.
----
---- @param previous_file_name string  filename of the previous run
----   (e.g. "RUN_A.json.gz")
---- @param next_run_id string  run_id of the resumed run
-function FileWriter:patch_previous_run_header(previous_file_name, next_run_id)
-    local ok, err = pcall(function()
-        -- Read the previous file.
-        local data = self.fs:read(previous_file_name)
-        if not data then
-            self.logger("FileWriter: patch_previous_run_header warning: "
-                .. "file not found: " .. tostring(previous_file_name))
-            return
-        end
-
-        -- Detect gzip by magic bytes 0x1f 0x8b. In the test environment
-        -- with passthrough_compress the data is plain JSON, so we try
-        -- Serializer.decode directly first. If the data starts with the
-        -- gzip magic bytes we would need to decompress first — but since
-        -- we can't call love.data.decompress in tests, we rely on the
-        -- test fs always storing plain JSON (passthrough_compress).
-        -- In production the compress function is love.data.compress, so
-        -- the stored data IS gzipped; however patch_previous_run_header
-        -- is only called at resume time (not the hot path), and the
-        -- production fs stores the raw compressed bytes. We detect gzip
-        -- and decompress when love.data is available.
-        local json_str
-        local is_gzip = #data >= 2
-            and data:byte(1) == 0x1f
-            and data:byte(2) == 0x8b
-        if is_gzip then
-            if love and love.data and love.data.decompress then
-                local ok_d, decompressed = pcall(function()
-                    local result = love.data.decompress("string", "gzip", data)
-                    if type(result) == "string" then return result end
-                    if type(result) == "userdata" and result.getString then
-                        return result:getString()
-                    end
-                    return nil
-                end)
-                if ok_d and decompressed then
-                    json_str = decompressed
-                else
-                    self.logger("FileWriter: patch_previous_run_header warning: "
-                        .. "failed to decompress " .. tostring(previous_file_name))
-                    return
-                end
-            else
-                -- No decompression available (test environment with real gzip).
-                -- This path is not expected in tests (passthrough_compress is used).
-                self.logger("FileWriter: patch_previous_run_header warning: "
-                    .. "gzip data but no decompressor available for "
-                    .. tostring(previous_file_name))
-                return
-            end
-        else
-            -- Plain JSON (test environment with passthrough_compress).
-            json_str = data
-        end
-
-        -- Decode the JSON record.
-        local ok_dec, record = pcall(function()
-            return self.serializer.decode(json_str)
-        end)
-        if not ok_dec or type(record) ~= "table" then
-            self.logger("FileWriter: patch_previous_run_header warning: "
-                .. "failed to decode JSON from " .. tostring(previous_file_name))
-            return
-        end
-
-        -- Update next_run_id.
-        record.next_run_id = next_run_id
-
-        -- Upgrade outcome to "interrupted" only when currently null or
-        -- "in_progress". Never overwrite "win" or "loss".
-        local current_outcome = record.outcome
-        local is_null = current_outcome == nil
-            or current_outcome == self.serializer.null
-        if is_null or current_outcome == "in_progress" then
-            record.outcome = "interrupted"
-        end
-
-        -- Re-encode and write back atomically.
-        local new_json = self.serializer.encode(record)
-        local new_data = self.compress(new_json)
-        self:write_atomic(previous_file_name, new_data)
-
-        self.logger("FileWriter: patched " .. tostring(previous_file_name)
-            .. " with next_run_id=" .. tostring(next_run_id))
-    end)
-
-    if not ok then
-        self.logger("FileWriter: patch_previous_run_header error for "
-            .. tostring(previous_file_name) .. ": " .. tostring(err))
-    end
-end
-
 --- No-op stub kept for API compatibility with the previous NDJSON-based
 --- recovery flow. With the in-memory model there are no orphan files to
 --- recover from a crash — interrupted runs simply lose their data.
@@ -564,69 +395,6 @@ end
 --- reintroduce streaming on a guarded path.
 function FileWriter:recover_orphan_runs()
     return 0
-end
-
---- Scan the log directory for the most-recent interrupted run file that
---- matches `seed`. Returns the run_id string when found, nil otherwise.
----
---- This is the resume-detection helper for Bug F. When `Game:start_run`
---- fires and the game state indicates a continue (ante > 1), we call
---- this to find the pre-quit file and reuse its run_id so capture
---- appends to the same logical run.
----
---- Detection heuristic: the decoded record has `seed_tag` equal to this
---- install's salted digest of `seed` (filenames and interrupted files
---- carry no seed, see "Seed privacy" above) and `outcome ==
---- "interrupted"`. We pick the one with the highest `start_timestamp`
---- (most recent) in case the player has multiple interrupted sessions
---- for the same seed.
----
---- @param seed string  The run seed from G.GAME.pseudorandom.seed
---- @return string|nil  The matching run_id, or nil if none found
-function FileWriter:find_interrupted_run_for_seed(seed)
-    local tag = self:seed_tag(seed)
-    if not tag then return nil end
-    local best_run_id   = nil
-    local best_timestamp = 0
-
-    local ok, names = pcall(function() return self.fs:list() end)
-    if not ok or not names then return nil end
-
-    for _, name in ipairs(names) do
-        if #name > #FINAL_EXT and name:sub(-#FINAL_EXT) == FINAL_EXT then
-            local run_id = name:sub(1, -#FINAL_EXT - 1)
-            pcall(function()
-                local raw = self.fs:read(name)
-                if not raw then return end
-                -- Detect gzip magic bytes and decompress if needed.
-                local json = raw
-                if raw:sub(1, 2) == "\x1f\x8b" then
-                    if love and love.data and love.data.decompress then
-                        local ok2, decompressed = pcall(function()
-                            return love.data.decompress("string", "gzip", raw)
-                        end)
-                        if ok2 and decompressed then
-                            json = type(decompressed) == "string"
-                                and decompressed
-                                or decompressed:getString()
-                        end
-                    end
-                end
-                local record = self.serializer.decode(json)
-                if type(record) == "table"
-                    and record.seed_tag == tag
-                    and record.outcome == "interrupted"
-                    and type(record.start_timestamp) == "number"
-                    and record.start_timestamp > best_timestamp
-                then
-                    best_run_id    = run_id
-                    best_timestamp = record.start_timestamp
-                end
-            end)
-        end
-    end
-
-    return best_run_id
 end
 
 --- Returns the directory where run files are saved.
