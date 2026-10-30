@@ -4,6 +4,15 @@ All notable changes to the Antelytics capture mod. The companion viewer at
 [antelytics.gg](https://www.antelytics.gg) updates continuously and isn't tied
 to these versions.
 
+## Unreleased
+
+- **Seed stays private until the run is over.** In-progress and interrupted
+  run files now carry `seed: null`, nodes no longer record the seed, and run
+  files are named `<timestamp>_<random>.json.gz` instead of starting with the
+  seed. The seed is stamped onto the file once the run ends in a win or loss.
+  Resume detection matches on a salted digest (`seed_tag`, salt in
+  `log/.seed_salt`) instead of the seed itself.
+
 ## v1.2.3-alpha
 
 - **Joker stickers now really captured** -- eternal / perishable (with its

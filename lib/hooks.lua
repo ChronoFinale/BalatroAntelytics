@@ -98,15 +98,17 @@ end
 -- ---------------------------------------------------------------------------
 -- Internal helpers
 -- ---------------------------------------------------------------------------
-local function generate_run_id(seed, timestamp)
-    -- The run_id becomes the log FILENAME (<run_id>.json.gz). Multiplayer seeds
-    -- can contain characters that are illegal in filenames — notably a leading
-    -- '*' in MP Attrition (seed "*I5DHZ93B") — which made the write silently
-    -- fail on Windows and produced NO file. Strip filesystem-reserved chars
-    -- (< > : " / \ | ? * and control chars) for the id; the untouched seed is
-    -- still recorded separately in the run's `seed` field.
-    local safe = tostring(seed or "unknown"):gsub('[<>:"/\\|?*%c]', '_')
-    return safe .. "_" .. tostring(timestamp or os.time())
+--- The run_id becomes the log FILENAME (<run_id>.json.gz). It carries NO
+--- seed: the seed reaches disk only once the run is over (file_writer.lua,
+--- "Seed privacy"). FileWriter owns the id format; this fallback is only for
+--- test harnesses that register hooks without a file_writer.
+local function generate_run_id(file_writer, timestamp)
+    if file_writer and file_writer.new_run_id then
+        return file_writer:new_run_id(timestamp)
+    end
+    local hex = {}
+    for i = 1, 8 do hex[i] = string.format("%x", math.random(0, 15)) end
+    return tostring(timestamp or os.time()) .. "_" .. table.concat(hex)
 end
 
 local function get_highlighted_card_ids()
@@ -255,13 +257,13 @@ function hooks.register_all(deps)
                     run_id = previous_id
                     if logger.info then
                         logger.info("Run resumed: " .. run_id
-                            .. " (seed=" .. seed .. ", ante=" .. tostring(ante) .. ")")
+                            .. " (ante=" .. tostring(ante) .. ")")
                     end
                 end
             end
 
             if not run_id then
-                run_id = generate_run_id(seed, timestamp)
+                run_id = generate_run_id(deps.file_writer, timestamp)
             end
 
             local gamemode_label = "solo"
@@ -292,7 +294,9 @@ function hooks.register_all(deps)
             )
 
             if logger.info then
-                logger.info("Run started: " .. run_id .. " (seed=" .. seed .. ", gamemode=" .. gamemode_label .. ")")
+                -- No seed in the log line either: the Antelytics log file sits
+                -- next to the run files and is shared with them.
+                logger.info("Run started: " .. run_id .. " (gamemode=" .. gamemode_label .. ")")
             end
         end)
 

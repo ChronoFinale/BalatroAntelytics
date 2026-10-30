@@ -1096,10 +1096,9 @@ function Capture.build_game_state(action_type)
         "discards_used", action_type
     )
 
-    state.seed = safe_access(
-        function() return G.GAME.pseudorandom.seed end,
-        "seed", action_type
-    )
+    -- No per-node seed. The run file is written mid-run, and the seed must
+    -- not reach disk before the run is over; FileWriter stamps it once on
+    -- the final record. (The viewer only ever read the top-level field.)
 
     state.timestamp = safe_access(
         function() return os.time() end,

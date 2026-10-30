@@ -255,7 +255,7 @@ describe("Capture module", function()
             assert.is_not_nil(state.money)
             assert.is_not_nil(state.hands_remaining)
             assert.is_not_nil(state.discards_remaining)
-            assert.is_not_nil(state.seed)
+            assert.is_nil(state.seed, "seed must not be captured per node")
             assert.is_not_nil(state.timestamp)
             assert.is_not_nil(state.full_deck)
             assert.is_not_nil(state.jokers)
@@ -276,7 +276,7 @@ describe("Capture module", function()
             assert.are.equal(3, state.hands_remaining)
             assert.are.equal(2, state.discards_remaining)
             assert.are.equal(1, state.discards_used)
-            assert.are.equal("SEED42", state.seed)
+            assert.is_nil(state.seed, "seed must not be captured per node")
             assert.is_number(state.timestamp)
         end)
 
@@ -991,7 +991,7 @@ describe("Capture module", function()
             assert.are.equal(8, state.money)
             assert.are.equal(3, state.hands_remaining)
             assert.are.equal(2, state.discards_remaining)
-            assert.are.equal("SEED42", state.seed)
+            assert.is_nil(state.seed, "seed must not be captured per node")
             assert.is_number(state.timestamp)
 
             -- full_deck still aggregates the surviving areas (deck, discard).
@@ -1067,7 +1067,7 @@ describe("Capture module", function()
                 "blind_slot",
                 "score", "money", "hands_remaining", "discards_remaining",
                 "discards_used",
-                "seed", "timestamp",
+                "timestamp",
                 "full_deck",
                 "jokers", "consumables", "vouchers", "hand_levels", "shop_inventory",
                 "tags", "location",
@@ -1097,7 +1097,7 @@ describe("Capture module", function()
             assert.is_number(state.money)
             assert.is_number(state.hands_remaining)
             assert.is_number(state.discards_remaining)
-            assert.is_string(state.seed)
+            assert.is_nil(state.seed, "seed must not be captured per node")
             assert.is_number(state.timestamp)
         end)
 

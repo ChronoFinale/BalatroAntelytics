@@ -16,12 +16,21 @@
 --- File location: <mod_path>/log/<run_id>.json.gz
 --- On Mac: ~/Library/Application Support/Balatro/Mods/Antelytics/log/
 ---
+--- Seed privacy: the seed is written to disk ONLY once the run is over
+--- (outcome "win" or "loss"). In-progress and interrupted files carry
+--- `seed: null`, the run_id / filename is `<timestamp>_<random hex>` and
+--- contains no seed, and nodes carry no seed. Resume detection instead
+--- matches on `seed_tag`, a digest of the seed keyed with a random
+--- per-install salt (`log/.seed_salt`), which cannot be reversed to the
+--- seed by someone who only holds the run file.
+---
 --- Final file format (after gzip decompression):
 ---   {
 ---     "version":         "1.0",
 ---     "run_id":          string,
 ---     "player_id":       string,
----     "seed":            string,
+---     "seed":            string | null   (null until the run is over),
+---     "seed_tag":        string | null   (salted digest, see above),
 ---     "gamemode":        string,
 ---     "start_timestamp": number,
 ---     "end_timestamp":   number | null,
@@ -36,6 +45,56 @@ FileWriter.__index = FileWriter
 
 local FORMAT_VERSION = "1.0"
 local FINAL_EXT      = ".json.gz"
+local SALT_FILE      = ".seed_salt"
+
+-- Outcomes after which the run is over and the seed may be written.
+local FINAL_OUTCOMES = { win = true, loss = true }
+
+-- ---------------------------------------------------------------------------
+-- Identifiers and digests (pure Lua with LÖVE fast paths)
+-- ---------------------------------------------------------------------------
+
+local HEX_DIGITS = "0123456789abcdef"
+
+--- Default RNG. love.math.random has its own generator that Balatro never
+--- reseeds; math.random is reseeded deterministically from the run seed by
+--- Balatro's pseudorandom() helpers, so it is only a fallback.
+local function default_random()
+    if love and love.math and love.math.random then
+        return love.math.random()
+    end
+    return math.random()
+end
+
+--- `n` random lowercase hex characters.
+function FileWriter.random_hex(n, rng)
+    rng = rng or default_random
+    local out = {}
+    for i = 1, n do
+        local k = math.floor(rng() * 16) % 16 + 1
+        out[i] = HEX_DIGITS:sub(k, k)
+    end
+    return table.concat(out)
+end
+
+--- Hex digest of a string. SHA-256 via love.data when available; otherwise
+--- two 32-bit multiplicative lanes (test environments without LÖVE only).
+function FileWriter.digest(s)
+    s = tostring(s)
+    if love and love.data and love.data.hash and love.data.encode then
+        local ok, hex = pcall(function()
+            return love.data.encode("string", "hex", love.data.hash("sha256", s))
+        end)
+        if ok and type(hex) == "string" and #hex > 0 then return hex end
+    end
+    local function lane(h, mul)
+        for i = 1, #s do
+            h = (h * mul + s:byte(i)) % 4294967296
+        end
+        return string.format("%08x", h)
+    end
+    return lane(5381, 33) .. lane(7919, 65599)
+end
 
 -- ---------------------------------------------------------------------------
 -- Filesystem facade — wraps the host's filesystem so tests can swap in a
@@ -168,6 +227,8 @@ end
 ---   mod_path    = string  (path to mod directory; "" disables NFS),
 ---   fs          = optional filesystem facade for testing,
 ---   compress    = optional compression function (string -> string),
+---   hash        = optional digest function (string -> hex string),
+---   random      = optional RNG (function -> number in [0, 1)),
 --- }
 function FileWriter.new(deps)
     deps = deps or {}
@@ -177,6 +238,9 @@ function FileWriter.new(deps)
         mod_path   = deps.mod_path or "",
         fs         = deps.fs or build_default_fs(deps.mod_path or ""),
         compress   = deps.compress or default_compress,
+        hash       = deps.hash or FileWriter.digest,
+        random     = deps.random or default_random,
+        salt       = nil,  -- lazily loaded from SALT_FILE
 
         -- Per-run state, reset on each start_run
         run_id          = nil,
@@ -188,6 +252,66 @@ function FileWriter.new(deps)
         previous_run_id = nil,
     }, FileWriter)
     return self
+end
+
+--- A fresh run_id: `<timestamp>_<8 random hex>`. Becomes the filename.
+--- Deliberately seed-free (see "Seed privacy" above); the timestamp prefix
+--- keeps a directory listing in chronological order.
+function FileWriter:new_run_id(timestamp)
+    return tostring(timestamp or os.time()) .. "_" .. FileWriter.random_hex(8, self.random)
+end
+
+--- The per-install salt, created on first use and persisted to SALT_FILE
+--- in the log directory. Cached on self afterwards.
+function FileWriter:get_salt()
+    if self.salt then return self.salt end
+    local salt
+    pcall(function() salt = self.fs:read(SALT_FILE) end)
+    if type(salt) ~= "string" or #salt < 16 then
+        salt = FileWriter.random_hex(32, self.random)
+        pcall(function() self.fs:write(SALT_FILE, salt) end)
+    end
+    self.salt = salt
+    return salt
+end
+
+--- Salted digest of a seed, or nil when the seed is unknown. Equal for the
+--- same seed on the same install; meaningless anywhere else.
+function FileWriter:seed_tag(seed)
+    if seed == nil or seed == "" or seed == "unknown" then return nil end
+    return self.hash(self:get_salt() .. ":" .. tostring(seed))
+end
+
+--- Build the record written by end_run and flush_partial. The seed is
+--- included only when `outcome` means the run is over.
+function FileWriter:build_record(outcome, final_ante, pvp_summary)
+    local null = self.serializer.null
+    local is_final = FINAL_OUTCOMES[outcome] == true
+    local record = {
+        version         = FORMAT_VERSION,
+        run_id          = self.run_id,
+        player_id       = self.player_id,
+        seed            = is_final and self.seed or null,
+        seed_tag        = self:seed_tag(self.seed) or null,
+        gamemode        = self.gamemode or "solo",
+        deck_back       = self.deck_back or null,
+        stake           = self.stake or null,
+        start_timestamp = self.start_timestamp,
+        end_timestamp   = os.time(),
+        outcome         = outcome or null,
+        final_ante      = final_ante or null,
+        pvp_summary     = pvp_summary or null,
+        nodes           = self.nodes,
+    }
+    -- Include chain-link fields only when they carry a value.
+    -- Using Lua nil omits the key from JSON entirely (cleaner than
+    -- encoding as JSON null for fields that are absent on most runs).
+    if self.previous_run_id then
+        record.previous_run_id = self.previous_run_id
+    end
+    -- next_run_id is always absent at write time; it is patched in
+    -- later by patch_previous_run_header when a resume is detected.
+    return record
 end
 
 -- ---------------------------------------------------------------------------
@@ -229,29 +353,7 @@ function FileWriter:end_run(outcome, final_ante, pvp_summary)
     local run_id = self.run_id
 
     local ok, err = pcall(function()
-        local record = {
-            version         = FORMAT_VERSION,
-            run_id          = run_id,
-            player_id       = self.player_id,
-            seed            = self.seed,
-            gamemode        = self.gamemode or "solo",
-            deck_back       = self.deck_back or self.serializer.null,
-            stake           = self.stake or self.serializer.null,
-            start_timestamp = self.start_timestamp,
-            end_timestamp   = os.time(),
-            outcome         = outcome or self.serializer.null,
-            final_ante      = final_ante or self.serializer.null,
-            pvp_summary     = pvp_summary or self.serializer.null,
-            nodes           = self.nodes,
-        }
-        -- Include chain-link fields only when they carry a value.
-        -- Using Lua nil omits the key from JSON entirely (cleaner than
-        -- encoding as JSON null for fields that are absent on most runs).
-        if self.previous_run_id then
-            record.previous_run_id = self.previous_run_id
-        end
-        -- next_run_id is always absent at write time; it is patched in
-        -- later by patch_previous_run_header when a resume is detected.
+        local record = self:build_record(outcome, final_ante, pvp_summary)
 
         local json = self.serializer.encode(record)
         local compressed = self.compress(json)
@@ -329,22 +431,7 @@ function FileWriter:flush_partial()
     local run_id = self.run_id
 
     local ok, err = pcall(function()
-        local record = {
-            version         = FORMAT_VERSION,
-            run_id          = run_id,
-            player_id       = self.player_id,
-            seed            = self.seed,
-            gamemode        = self.gamemode or "solo",
-            start_timestamp = self.start_timestamp,
-            end_timestamp   = os.time(),
-            outcome         = "in_progress",
-            final_ante      = self.serializer.null,
-            pvp_summary     = self.serializer.null,
-            nodes           = self.nodes,
-        }
-        if self.previous_run_id then
-            record.previous_run_id = self.previous_run_id
-        end
+        local record = self:build_record("in_progress", nil, nil)
 
         local json = self.serializer.encode(record)
         local compressed = self.compress(json)
@@ -487,16 +574,18 @@ end
 --- this to find the pre-quit file and reuse its run_id so capture
 --- appends to the same logical run.
 ---
---- Detection heuristic: filename starts with `seed .. "_"` and the
---- decoded record has `outcome == "interrupted"`. We pick the one with
---- the highest `start_timestamp` (most recent) in case the player has
---- multiple interrupted sessions for the same seed.
+--- Detection heuristic: the decoded record has `seed_tag` equal to this
+--- install's salted digest of `seed` (filenames and interrupted files
+--- carry no seed, see "Seed privacy" above) and `outcome ==
+--- "interrupted"`. We pick the one with the highest `start_timestamp`
+--- (most recent) in case the player has multiple interrupted sessions
+--- for the same seed.
 ---
 --- @param seed string  The run seed from G.GAME.pseudorandom.seed
 --- @return string|nil  The matching run_id, or nil if none found
 function FileWriter:find_interrupted_run_for_seed(seed)
-    if not seed or seed == "" or seed == "unknown" then return nil end
-    local prefix = seed .. "_"
+    local tag = self:seed_tag(seed)
+    if not tag then return nil end
     local best_run_id   = nil
     local best_timestamp = 0
 
@@ -504,8 +593,7 @@ function FileWriter:find_interrupted_run_for_seed(seed)
     if not ok or not names then return nil end
 
     for _, name in ipairs(names) do
-        -- Only consider files that start with our seed prefix.
-        if name:sub(1, #prefix) == prefix and name:sub(-#FINAL_EXT) == FINAL_EXT then
+        if #name > #FINAL_EXT and name:sub(-#FINAL_EXT) == FINAL_EXT then
             local run_id = name:sub(1, -#FINAL_EXT - 1)
             pcall(function()
                 local raw = self.fs:read(name)
@@ -526,6 +614,7 @@ function FileWriter:find_interrupted_run_for_seed(seed)
                 end
                 local record = self.serializer.decode(json)
                 if type(record) == "table"
+                    and record.seed_tag == tag
                     and record.outcome == "interrupted"
                     and type(record.start_timestamp) == "number"
                     and record.start_timestamp > best_timestamp

@@ -74,7 +74,9 @@ the game is the one that records.
    | **Manual, macOS** | `~/Library/Application Support/Balatro/Mods/Antelytics/log/` |
    | **r2modman** | `<profile>\mods\Chrono-Antelytics\log\` (Settings → Browse profile folder) |
 
-   Files are named `<run_id>.json.gz`.
+   Files are named `<timestamp>_<random>.json.gz`. The run's seed is written
+   into the file only once the run is over, so an in-progress file never
+   reveals it.
 3. Open **[www.antelytics.gg](https://www.antelytics.gg)** and load that file (the **↑ Load
    run** button, or drag-and-drop). Step through your run ante by ante.
 
