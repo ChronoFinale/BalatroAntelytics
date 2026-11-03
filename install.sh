@@ -25,6 +25,14 @@ rsync -a --no-links --delete \
     --exclude='session.log' \
     --exclude='config.lua' \
     --exclude='.kiro/' \
+    --exclude='bmm/' \
+    --exclude='dist/' \
+    --exclude='thunderstore/' \
+    --exclude='.github/' \
+    --exclude='.gitattributes' \
+    --exclude='.gitignore' \
+    --exclude='PUBLISHING.md' \
+    --exclude='package*' \
     --exclude='.DS_Store' \
     --exclude='install.sh' \
     --exclude='install.ps1' \

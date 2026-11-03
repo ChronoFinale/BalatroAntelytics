@@ -13,8 +13,10 @@
 --- buffer in memory; flush once at end_run when the player is no
 --- longer actively playing.
 ---
---- File location: <mod_path>/log/<run_id>.json.gz
---- On Mac: ~/Library/Application Support/Balatro/Mods/Antelytics/log/
+--- File location: <love save dir>/Antelytics/log/<run_id>.json.gz
+---   Windows: %APPDATA%\Balatro\Antelytics\log\
+---   macOS:   ~/Library/Application Support/Balatro/Antelytics/log/
+--- Outside Mods/ on purpose: Steamodded scans mod folders for metadata.
 ---
 --- Seed privacy: the seed is written to disk ONLY once the run is over
 --- (outcome "win" or "loss"). In-progress and interrupted files carry
@@ -78,19 +80,35 @@ end
 -- ---------------------------------------------------------------------------
 -- Filesystem facade — wraps the host's filesystem so tests can swap in a
 -- pure-Lua in-memory implementation. The default backend uses SMODS.NFS
--- when available (lets us write to the mod directory) and falls back to
--- love.filesystem (sandboxed save directory) otherwise.
+-- when available (absolute path into the save directory) and falls back to
+-- love.filesystem (same directory, relative path) otherwise.
 -- ---------------------------------------------------------------------------
+
+-- Run files live in LÖVE's save directory, NOT in the mod folder. Steamodded
+-- walks every mod folder on boot and tries to parse any file whose name
+-- contains ".json" as mod metadata (unanchored match up to 1.0.0~BETA-1620a;
+-- anchored since 26.1002.0), so a log/ full of <id>.json.gz run files cost one
+-- "invalid metadata JSON" warning per run plus a gzip read on every launch.
+-- The save directory (%APPDATA%\Balatro on Windows, ~/Library/Application
+-- Support/Balatro on macOS) sits outside Mods/ and is the same place for a
+-- manual install and an r2modman profile.
+local RUN_DIR_REL = "Antelytics/log"
 
 local function build_default_fs(mod_path)
     local nfs = rawget(_G, "SMODS") and rawget(_G, "SMODS").NFS
     local has_nfs = nfs and mod_path and mod_path ~= ""
-    local log_dir = has_nfs and (mod_path .. "log") or "Antelytics"
+
+    local save_dir
+    if has_nfs then
+        pcall(function() save_dir = love.filesystem.getSaveDirectory() end)
+        has_nfs = type(save_dir) == "string" and save_dir ~= ""
+    end
+    local log_dir = has_nfs and (save_dir .. "/" .. RUN_DIR_REL) or RUN_DIR_REL
 
     if has_nfs then
         pcall(function() nfs.createDirectory(log_dir) end)
     else
-        pcall(function() love.filesystem.createDirectory("Antelytics") end)
+        pcall(function() love.filesystem.createDirectory(RUN_DIR_REL) end)
     end
 
     return {
@@ -102,7 +120,7 @@ local function build_default_fs(mod_path)
                 local path = log_dir .. "/" .. name
                 return nfs.write(path, data)
             else
-                local path = "Antelytics/" .. name
+                local path = RUN_DIR_REL .. "/" .. name
                 return love.filesystem.write(path, data)
             end
         end,
@@ -114,7 +132,7 @@ local function build_default_fs(mod_path)
                 local ok, data = pcall(function() return nfs.read(path) end)
                 return ok and data or nil
             else
-                local path = "Antelytics/" .. name
+                local path = RUN_DIR_REL .. "/" .. name
                 local ok, data = pcall(function()
                     return love.filesystem.read(path)
                 end)
@@ -143,7 +161,7 @@ local function build_default_fs(mod_path)
                 pcall(function() nfs.remove(log_dir .. "/" .. name) end)
             else
                 pcall(function()
-                    love.filesystem.remove("Antelytics/" .. name)
+                    love.filesystem.remove(RUN_DIR_REL .. "/" .. name)
                 end)
             end
             return true
@@ -164,7 +182,7 @@ local function build_default_fs(mod_path)
                 end
             else
                 local ok, items = pcall(function()
-                    return love.filesystem.getDirectoryItems("Antelytics")
+                    return love.filesystem.getDirectoryItems(RUN_DIR_REL)
                 end)
                 if ok and items then
                     for _, name in ipairs(items) do

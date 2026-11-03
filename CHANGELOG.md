@@ -4,6 +4,20 @@ All notable changes to the Antelytics capture mod. The companion viewer at
 [antelytics.gg](https://www.antelytics.gg) updates continuously and isn't tied
 to these versions.
 
+## v1.3.1-alpha
+
+- **Run files moved out of `Mods/`.** They now land in Balatro's save
+  directory: `%APPDATA%\Balatro\Antelytics\log\` on Windows,
+  `~/Library/Application Support/Balatro/Antelytics/log/` on macOS — the same
+  folder whether you installed by hand or through r2modman. Steamodded scans
+  every mod folder for metadata on boot and was trying to parse each run file
+  as a mod manifest, logging one "invalid metadata JSON" warning per run and
+  slowing startup. Files already in `Mods/Antelytics/log/` are left alone and
+  still open in the viewer.
+- **Installers skip dev-only folders** (`bmm/`, `dist/`, `thunderstore/`,
+  `.github/`), whose `.json` files Steamodded also picked up as mod metadata
+  and whose nested copy of the mod it could load twice.
+
 ## v1.3.0-alpha
 
 - **Seed stays private until the run is over.** In-progress and interrupted

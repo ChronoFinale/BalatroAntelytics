@@ -44,35 +44,35 @@ Option B.
 
 ### Where the files end up
 
-Antelytics writes its run files to a `log` folder **next to wherever it was
-installed** — it asks Steamodded for its own location, so both install methods
-work without any configuration. The two methods just put the mod in different
-places:
+Antelytics writes its run files to an `Antelytics/log` folder in Balatro's
+**save directory** — the same place the game keeps its own saves and
+settings, one level up from `Mods/`. It is the same folder for a manual
+install and an r2modman profile, so nothing needs configuring:
 
-| Install method | Mod folder | Run files |
-|---|---|---|
-| **Manual** | `…/Balatro/Mods/Antelytics/` | `…/Balatro/Mods/Antelytics/log/` |
-| **r2modman** | `<profile>/mods/Chrono-Antelytics/` | `<profile>/mods/Chrono-Antelytics/log/` |
+| OS | Run files |
+|---|---|
+| **Windows** | `%APPDATA%\Balatro\Antelytics\log\` |
+| **macOS** | `~/Library/Application Support/Balatro/Antelytics/log/` |
+| **Linux (Proton)** | `…/compatdata/2379780/pfx/drive_c/users/steamuser/AppData/Roaming/Balatro/Antelytics/log/` |
 
-`<profile>` is the manager's profile directory: in r2modman use
-**Settings → Browse profile folder**. By default that is
-`%APPDATA%\r2modmanPlus-local\Balatro\profiles\<profile name>\` on Windows.
-A manual copy and a manager copy don't see each other; whichever way you launch
-the game is the one that records.
+The run files deliberately live outside `Mods/`: Steamodded scans every mod
+folder for metadata on boot, and a folder full of run files slowed that scan
+and filled the log with warnings. (Versions before 1.3.1 wrote to
+`Mods/Antelytics/log/`; files already there stay put and still open in the
+viewer.)
 
 ---
 
 ## How to use it
 
 1. **Play a run.** Antelytics records it automatically — nothing to turn on.
-2. When you want to review it, find your run file in the mod's `log` folder
-   (see *Where the files end up* above):
+2. When you want to review it, find your run file in Balatro's save
+   directory (see *Where the files end up* above):
 
-   | Install | Log folder |
+   | OS | Log folder |
    |---|---|
-   | **Manual, Windows** | `%APPDATA%\Balatro\Mods\Antelytics\log\` |
-   | **Manual, macOS** | `~/Library/Application Support/Balatro/Mods/Antelytics/log/` |
-   | **r2modman** | `<profile>\mods\Chrono-Antelytics\log\` (Settings → Browse profile folder) |
+   | **Windows** | `%APPDATA%\Balatro\Antelytics\log\` |
+   | **macOS** | `~/Library/Application Support/Balatro/Antelytics/log/` |
 
    Files are named `<timestamp>_<random>.json.gz`. The run's seed is written
    into the file only once the run is over, so an in-progress file never

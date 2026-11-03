@@ -32,7 +32,15 @@ $Excludes = @(
     'install.sh',
     'install.ps1',
     '*.bak',
-    '.kiro'
+    '.kiro',
+    'bmm',
+    'dist',
+    'thunderstore',
+    '.github',
+    '.gitattributes',
+    '.gitignore',
+    'PUBLISHING.md',
+    'package*'
 )
 
 # Wipe source files only. NEVER touch log/ or session.log — those hold
@@ -92,4 +100,4 @@ Get-ChildItem -Path $RepoDir -Force | ForEach-Object {
 Write-Host ("Done. Mod installed to: {0}" -f $ModsDir)
 Write-Host ""
 Write-Host "Restart Balatro to pick up the changes."
-Write-Host "Run logs will land at: $ModsDir\log\*.json.gz"
+Write-Host "Run files will land at: $env:APPDATA\Balatro\Antelytics\log\*.json.gz"

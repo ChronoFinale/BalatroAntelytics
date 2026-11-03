@@ -2,8 +2,8 @@
 --- Mod entry point for the Balatro Antelytics.
 ---
 --- Captures one JSON file per PvP Attrition run. No server, no network calls.
---- The file lands at <mod_path>/log/<seed>_<timestamp>.json and can be loaded
---- in the viewer for post-game analysis.
+--- The file lands at <save dir>/Antelytics/log/<run_id>.json.gz (outside
+--- Mods/, see lib/file_writer.lua) and can be loaded in the viewer.
 ---
 --- Architecture:
 ---   - Recorder         single source of truth for sending nodes
